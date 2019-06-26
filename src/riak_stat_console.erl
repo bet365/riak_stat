@@ -25,38 +25,27 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {
+  priority = metadata
+}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+-spec(coordinate(Fun :: term(), Arg :: term()) ->
+  ok | {error, Reason :: term()} | term()).
+%% @doc
+%% coordinates the function calls from riak_core_console
+%% the function is checked in riak_stat_data if it is a function that
+%% actually exists, if not then {error, no_function_found} is returned
+%% @end
 coordinate(Fun, Arg) ->
-  Fun1 = riak_stat_data:sanitise_func(Fun),
-  gen_server:call(?SERVER, {Fun1, Arg}).
+  Fun1 = sanitise_func(Fun),
+  Arg1 = sanitise_data(Arg),
+  Response = gen_server:call(?SERVER, {Fun1, Arg1}),
+  print(Response).
 
-%% stat_show
-
-%% stat_show_0
-
-%% stat_info
-
-%% stat_enable
-
-%% stat_disable
-
-%% stat_disable_0
-
-%% reset_stat
-
-
-%% profile_arg
-
-
-
-
-%%no_function_found(_Info) ->
-%%  {error, no_function_found}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,9 +94,9 @@ init([]) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
-handle_call({stat_show, Arg}, _From, State) ->
-  Arg,
-  {reply, ok, State};
+handle_call({stat_show, Arg}, _From, State = #state{priority = Priority}) ->
+  Reply = check_in(Priority, Arg),
+  {reply, {Reply, []}, State};
 handle_call({stat_info, Arg}, _From, State) ->
   Arg,
   {reply, ok, State};
@@ -129,11 +118,11 @@ handle_call({stat_reset, Arg}, _From, State) ->
 handle_call({stat_disabled, Arg}, _From, State) ->
   Arg,
   {reply, ok, State};
-handle_call({no_function_found, Arg}, _From, State) ->
-  Arg,
-  {reply, ok, State};
-handle_call(_Request, _From, State) ->
-  {reply, ok, State}.
+
+handle_call({Request, _Arg}, _From, State) ->
+  {reply, {error, Request}, State};
+handle_call(Request, _From, State) ->
+  {reply, {error, Request}, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -199,3 +188,32 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+print(Response) ->
+  lists:map(fun({R, A}) ->
+  riak_stat_info:print(R, A)
+            end, Response).
+
+sanitise_func(Fun) ->
+  riak_stat_data:sanitise_func(Fun).
+
+sanitise_data(Arg) ->
+  riak_stat_data:sanitise_data(Arg).
+
+%%%
+%%check_in(metadata, {Stat, Status}) ->
+%%  find_meta_info(Stat, Status);
+%%check_in(exometer, {Stat, Status}) ->
+%%  find_exom_info(Stat, Status);
+check_in(metadata, Arg) ->
+  find_meta_info(Arg);
+check_in(exometer, Arg) ->
+  find_exom_info(Arg).
+
+find_meta_info(Arg) ->
+  riak_stat_metadata:get(Arg, status).
+
+find_exom_info(Arg) ->
+  riak_stat_exometer:find_entries(Arg).
+
+

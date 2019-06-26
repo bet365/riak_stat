@@ -21,14 +21,12 @@
 %% admin API
 -export([]).
 
-
-%% riak_core_console calls into this module for stats in the console
-%% and for profile functions the sat comes in the form (Arg, Type), where
-%% Type :: {console,...} | {profiles,...}
-%%
-%% for profiles it includes the function name as well
-%%
-%% for example:
+-spec(coordinate(Arg :: term(), Type :: {atom(), atom()}) ->
+  ok | term() | {error, Reason :: term()}).
+%% @doc
+%% Any data from the modules are sent to this function and then sent to the
+%% necessary module to perform the function needed.
+%% @end
 coordinate(Arg0, Type) ->
   Arg = sanitise_data(Arg0),
  case Type of
@@ -48,8 +46,6 @@ coordinate(Arg0, Type) ->
 sanitise_data(Arg) ->
     riak_stat_data:sanitise_data(Arg).
 
-%%sanitise_func(Fun) ->
-%%    riak_stat_data:sanitise_func(Fun).
 %%
 %%
 %% all calls to register -> admin -> metadata -> exometer

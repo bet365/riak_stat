@@ -28,37 +28,24 @@
 
 -record(state, {
   profile = none,
-  profilelist
+  profilelist =[]
 }).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+-spec(coordinate(Fun :: term(), Arg :: term()) ->
+  ok | {error, Reason :: term()} | term()).
+%% @doc
+%% coordinates the function calls from riak_core_console for profile
+%% requests,
+%% the function is checked in riak_stat_data if it is a function that
+%% actually exists, if not then {error, no_function_found} is returned
+%% @end
 coordinate(Fun, Arg) ->
   Fun1 = riak_stat_data:sanitise_func(Fun),
   gen_server:call(?SERVER, {Fun1, Arg}).
-
-%% load_profile
-
-%% add_profile
-
-%% add_profile_stat
-
-%% remove_profile
-
-%% remove_profile_stat
-
-%% reset_profiles
-
-
-%% check_stat
-
-%% change_stat
-
-
-%%no_function_found(_Info) ->
-%%  {error, no_function_found}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -140,10 +127,10 @@ handle_call({check_profile_stat, Arg}, _From, State) ->
 handle_call({change_profile_stat, Arg}, _From, State) ->
   Arg,
   {reply, ok, State};
-handle_call({no_function_found, _Arg}, _From, State) ->
-  {reply, {error, no_function_found}, State};
-handle_call(_Request, _From, State) ->
-  {reply, ok, State}.
+handle_call({Request, _Arg}, _From, State) ->
+  {reply, {error, Request}, State};
+handle_call(Request, _From, State) ->
+  {reply, {error, Request}, State}.
 
 %%--------------------------------------------------------------------
 %% @private

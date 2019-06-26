@@ -10,7 +10,9 @@
 -author("savannahallsop").
 
 %% API
--export([]).
+-export([print/2]).
+
+print(Response, Attr) ->
 
 
 %% print_stats is in this module, anything that needs io:fwrite or a response
