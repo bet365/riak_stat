@@ -36,3 +36,11 @@ coordinate(Fun, Arg) ->
 no_function_found(_Info) ->
   {error, no_function_found}.
 
+register(Arg) ->
+  Arg.
+
+update(Arg) ->
+  Arg.
+
+read(Arg) ->
+  Arg.
