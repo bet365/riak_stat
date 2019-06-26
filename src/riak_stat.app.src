@@ -1,0 +1,23 @@
+{application, riak_stat,
+ [
+  {description, "Stat Management for Riak"},
+  {vsn, "1.0.0"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  lager,
+                  exometer_core,
+                  riak_core
+                 ]},
+  {mod, { riak_stat_app, []}},
+  {env, [
+    {exometer_defaults,
+      [
+        {['_'], histogram, [{options,
+          [{histogram_module, exometer_slot_slide},
+            {keep_high, 500}]}
+        ]}
+      ]}
+  ]}
+ ]}.
