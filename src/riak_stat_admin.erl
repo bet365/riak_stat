@@ -11,6 +11,9 @@
 
 -behaviour(gen_server).
 
+-export([register/3,
+  unregister/5]).
+
 -export([coordinate/1, coordinate/2]).
 
 %% API
@@ -32,10 +35,34 @@
 %%% API
 %%%===================================================================
 
+register(P, App, Stat) ->
+  gen_server:call(?SERVER, {register, P, App, Stat}).
+
+unregister(Pfx, App, Mod, Idx, Type) ->
+  gen_server:call(?SERVER, {unregister, {Pfx, App, Mod, Idx, Type}}).
+
+-spec(unreg_meta_stat(StatName :: term()) -> term() | ok | {error, Reason :: term()}).
+%% @doc
+%% Marks the meta data of a stat as unregistered, deleting the stat from the
+%% metadata will mean upon node restarting it will re_register. This option
+%% prevents this from happening and keeps a record of the stats history
+%% @end
+unreg_meta_stat(Statname) ->
+  riak_stat_metadata:unregister(Statname).
+
+-spec(unreg_exom_stat(StatName :: term()) -> term() | ok | {error, Reason :: term()}).
+%% @doc
+%% unregister the stat form exometer, after the stat is marked as unregistered in
+%% metadata
+%% @end
+unreg_exom_stat(Statname) ->
+  riak_stat_exometer:unregister_stat(Statname).
+
+
 coordinate({Fun, Arg}) ->
   coordinate(Fun, Arg).
 coordinate(Fun, Arg) ->
-  gen_server:cast(?SERVER, {Fun, Arg}).
+  gen_server:call(?SERVER, {Fun, Arg}).
 %%  case Fun of
 %%    register ->
 %%      register(Arg);
@@ -48,14 +75,6 @@ coordinate(Fun, Arg) ->
 %%no_function_found(_Info) ->
 %%  {error, no_function_found}.
 
-register(Arg) ->
-  Arg.
-
-update(Arg) ->
-  Arg.
-
-read(Arg) ->
-  Arg.
 
 
 
@@ -114,6 +133,15 @@ init([]) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
+
+handle_call({register, {P, App, Stats}}, _From, State =#state{statstable = ETS}) ->
+  lists:foreach(fun(Stat) ->
+    register_stat(P, App, Stat, ETS)
+                end, Stats),
+  {reply, ok, State};
+handle_call({unregister, Pfx, App, Mod, Idx, Type}, _From, State) ->
+  unreg_stats(Pfx, App, Type, Mod, Idx),
+  {reply, ok, State};
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
@@ -129,14 +157,14 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
 
-handle_cast({register, {App, Stats}}, State =#state{statstable = ETS}) ->
-  lists:foreach(fun(Stat) ->
-    register_stat(prefix(), App, Stat, ETS)
-                end, Stats),
-  {noreply, State};
-handle_cast({read, Stat}, State) ->
-
-  {noreply, State};
+%%handle_cast({register, {App, Stats}}, State =#state{statstable = ETS}) ->
+%%  lists:foreach(fun(Stat) ->
+%%    register_stat(prefix(), App, Stat, ETS)
+%%                end, Stats),
+%%  {noreply, State};
+%%handle_cast({read, Stat}, State) ->
+%%
+%%  {noreply, State};
 
 handle_cast(_Request, State) ->
   {noreply, State}.
@@ -191,9 +219,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+%%
 
-prefix() ->
-  app_helper:get_env(riak_core, stat_prefix, riak).
 
 register_stat(P, App, Stat, Tab) ->
   {Name, Type, Opts, Aliases} =
@@ -217,15 +244,33 @@ stat_name(P, App, N) when is_list(N) ->
 stat_name_([P, [] | Rest]) -> [P | Rest];
 stat_name_(N) -> N.
 
+
+unreg_stats(P, App, Type, [Op, time], Index) ->
+  unreg_from_both([P, App, Type, Op, time, Index]);
+unreg_stats(P, App, Type, Mod, Index) ->
+  unreg_from_both([P, App, Type, Mod, Index]).
+
+unreg_from_both(StatName) ->
+  case unreg_meta_stat(StatName) of
+    ok ->
+      unreg_exom_stat(StatName);
+    unregistered ->
+      unreg_exom_stat(StatName);
+    _ ->
+      lager:debug("riak_stat_mngr:unreg_both -- could not unregister from meta~n"),
+      ok
+  end.
+
+
 %%%%%% METADATA %%%%%%
 
 to_metadata(Fun, Arg) ->
-  riak_stat_coordinator:coordinate(metadata, {Fun, Arg}).
-
-
+  riak_stat_metadata:coordinate(Fun, Arg).
 
 
 %%%%%% EXOMETER %%%%%%
 
 to_exometer(Fun, Arg) ->
-  riak_stat_coordinator:coordinate(exometer, {Fun, Arg}).
+  riak_stat_exometer:coordinate(Fun, Arg).
+
+

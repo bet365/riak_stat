@@ -14,34 +14,56 @@
         re_register/2, re_register/3,
 
         get_datapoint/2, get_value/1, get_values/1, select_stat/1,  % Read
-        info/2,
+        info/2, read_stats/1,
 
         update_or_create/3, update_or_create/4, set_opts/2, % Update
 
-        unregister_stat/1, reset_stat/1 % Delete
+        unregister_stats/4, unregister_stat/1, reset_stat/1 % Delete
 ]).
 
 %% Secondary API
--export([timestamp/0, coordinate/1
-        ]).
+-export([timestamp/0]).
 
 %% additional API
 -export([start/0, stop/0]).
 
+-define(PFX, riak_stat:prefix()).
+
 %%%%%%%%%%%%%% CREATING %%%%%%%%%%%%%%
 
-
-coordinate({Fun, Arg}) ->
-  coordinate(Fun, Arg).
-coordinate(Fun, Arg) ->
-  case Fun of
-    register ->
-      {StatName, Type, Opts, Aliases} = Arg,
-      register_stat(StatName, Type, Opts, Aliases);
-    update ->
-      {Name, UpdateVal, Type} = Arg,
-      update_or_create(Name, UpdateVal, Type)
-  end.
+%%-spec(coordinate(Arg :: {atom(), term()}) ->
+%%  ok | term() | {error, Reason :: term()}).
+%%coordinate({Fun, Arg}) ->
+%%  coordinate(Fun, Arg).
+%%-spec(coordinate(Fun :: atom(), Arg :: {atom(), term()} | term()) ->
+%%  ok | term() | {error, Reason :: term()}).
+%%coordinate(Fun, Arg) ->
+%%  case Fun of
+%%    register ->
+%%      {StatName, Type, Opts, Aliases} = Arg,
+%%      register_stat(StatName, Type, Opts, Aliases);
+%%    update ->
+%%      {Name, UpdateVal, Type} = Arg,
+%%      update_or_create(Name, UpdateVal, Type);
+%%    read ->
+%%      read_stats(Arg);
+%%    unregister ->
+%%      {Mod, Idx, Type, App} = Arg,
+%%      unregister_stats(Mod, Idx, Type, App);
+%%    AFun ->
+%%      case Arg of
+%%        {Ar, Gu} ->
+%%          AFun(Ar, Gu);
+%%        {A, R, G} ->
+%%          AFun(A, R, G);
+%%        {An, Arg, U, Ment} ->
+%%          AFun(An, Arg, U, Ment);
+%%        [] ->
+%%          AFun();
+%%        Arg ->
+%%          AFun(Arg)
+%%      end
+%%  end.
 
 
 -spec(register_stat(StatName :: list(), Type :: atom(), Opts :: list(), Aliases :: term()) ->
@@ -106,6 +128,15 @@ alias_fun() ->
 
 %%%%%%%%%%%%%% READING %%%%%%%%%%%%%%
 
+-spec(read_stats(App :: atom()) -> term() | {error, Reason :: term()}).
+%% @doc
+%% read the stats from exometer and print them out in the format needed, uses
+%% exometer functions.
+%% @end
+read_stats(App) ->
+  Values = get_values([?PFX, App]),
+  [print_stats(Name, [status]) || {Name, _V} <- Values].
+
 -spec(get_datapoint(Name :: term(), Datapoint :: term()) -> term()).
 %% @doc
 %% Retrieves the datapoint value from exometer
@@ -169,6 +200,11 @@ set_opts(StatName, Opts) ->
 
 %%%%%%%%%%%%% UNREGISTER / RESET %%%%%%%%%%%%%%
 
+unregister_stats([Op, time], Idx, Type, App) ->
+  unregister_stat([?PFX, App, Type, Op, time, Idx]);
+unregister_stats(Mod, Idx, Type, App) ->
+  unregister_stat([?PFX, App, Type, Mod, Idx]).
+
 -spec(unregister_stat(StatName :: term()) -> ok | term() | {error, Reason :: term()}).
 %% @doc
 %% deletes the stat entry from exometer
@@ -207,7 +243,8 @@ start() ->
 stop() ->
   exometer:stop().
 
-
+print_stats(Stat, Attr) ->
+  riak_stat_info:print(Stat, Attr).
 
 
 
