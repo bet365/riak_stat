@@ -11,6 +11,20 @@
 
 -behaviour(gen_server).
 
+%% API
+-export([]).
+
+%% Data API
+-export([find_entries/2]).
+
+%% Info API
+-export([print/2]).
+
+%% coordinator API
+-export([]).
+
+%% ____________________--
+
 -export([register/3,
   unregister/5]).
 
@@ -32,8 +46,25 @@
 -record(state, {statstable}).
 
 %%%===================================================================
-%%% API
+%%% Data API
 %%%===================================================================
+
+
+%%%===================================================================
+%%% Info API
+%%%===================================================================
+
+print(Entries, Attr) ->
+  riak_stat_info:print(Entries, Attr).
+
+find_entries(Arg, Status) ->
+  riak_stat_data:find_entries(Arg, Status).
+
+%%%===================================================================
+%%% Coordinator API
+%%%===================================================================
+
+
 
 register(P, App, Stat) ->
   gen_server:call(?SERVER, {register, P, App, Stat}).

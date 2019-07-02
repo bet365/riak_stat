@@ -11,6 +11,18 @@
 
 -behaviour(gen_server).
 
+%% API
+-export([]).
+
+%% Admin Api
+-export([]).
+
+%% Coordinator API
+-export([]).
+
+
+
+
 -export([coordinate/2]).
 
 %% API

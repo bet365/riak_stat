@@ -10,31 +10,63 @@
 -author("savannahallsop").
 
 %% API
--export([coordinate/2]).
-
-%% console API
 -export([]).
 
-%% profiles API
+%% Metadata API
 -export([]).
 
-%% admin API
+%% Exometer API
 -export([]).
 
--spec(coordinate(Arg :: term(), Type :: {atom(), atom()}) ->
-  ok | term() | {error, Reason :: term()}).
-%% @doc
-%% Any data from the modules are sent to this function and then sent to the
-%% necessary module to perform the function needed.
-%% @end
-coordinate(WhereTo, Arg) ->
-  case WhereTo of
-    metadata ->
-      riak_stat_metadata:coordinate(Arg);
-    exometer ->
-      riak_stat_exometer:coordinate(Arg);
-    admin ->
-      riak_stat_admin:coordinate(Arg)
-  end.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+%%-spec(coordinate(Arg :: term(), Type :: {atom(), atom()}) ->
+%%  ok | term() | {error, Reason :: term()}).
+%%%% @doc
+%%%% Any data from the modules are sent to this function and then sent to the
+%%%% necessary module to perform the function needed.
+%%%% @end
+%%coordinate(WhereTo, Arg) ->
+%%  case WhereTo of
+%%    metadata ->
+%%      riak_stat_metadata:coordinate(Arg);
+%%    exometer ->
+%%      riak_stat_exometer:coordinate(Arg);
+%%    admin ->
+%%      riak_stat_admin:coordinate(Arg)
+%%  end.
 
 

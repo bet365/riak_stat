@@ -37,6 +37,10 @@ init([]) ->
             {riak_stat_console, start_link, []},
             Restart, Shutdown, Type, [riak_stat_console]},
 
+    AdminChild =
+        {admin,
+            {riak_stat_admin, start_link, []},
+            Restart, Shutdown, Type, [riak_stat_admin]},
     %% TODO: read the metadata and pull out profiles and their stats
         %% send them into the Profile Server to be initiated
 
@@ -46,5 +50,5 @@ init([]) ->
             Restart, Shutdown, Type, [riak_stat_profiles]},
 
 
-    {ok, {SupFlags, [ConsoleChild, ProfileChild]}}.
+    {ok, {SupFlags, [AdminChild, ConsoleChild, ProfileChild]}}.
 

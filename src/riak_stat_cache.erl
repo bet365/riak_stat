@@ -11,3 +11,6 @@
 
 %% API
 -export([]).
+
+%% Coordinator API
+-export([]).
