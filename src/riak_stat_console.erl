@@ -91,6 +91,7 @@ disable_stat_0(Arg) ->
 %% change the status of the stat in metadata and in exometer
 %% @end
 status_change(Arg, ToStatus) ->
+  % todo: get the list of stats and the status pulled out of the metadata
   OldStatus = gen_server:call(?SERVER, {change_status, Arg, ToStatus}),
   responder(Arg, OldStatus, fun change_status/2, ToStatus).
 
@@ -116,7 +117,7 @@ print_stats(Entries, Attributes) ->
 %%%===================================================================
 
 change_status(Name, ToStatus) ->
-  riak_stat_coordinator:change_status(Name, ToStatus).
+  riak_stat_coordinator:coordinate(change_status, [{Name, {status, ToStatus}}]).
 %%  case change_meta_status(Name, ToStatus) of
 %%    ok ->
 %%      change_exom_status(Name, ToStatus);
@@ -216,6 +217,7 @@ handle_call({change_status, _Arg, ToStatus}, _From, State) ->
                 disabled -> enabled;
                 _ -> '_'
               end,
+
   {reply, OldStatus, State};
 handle_call({show_stat_0, Arg}, _From, State) ->
   io:fwrite("Arg: ~p~n", [Arg]),

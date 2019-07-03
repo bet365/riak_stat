@@ -9,16 +9,12 @@
 -module(riak_stat_exometer).
 -author("savannahallsop").
 
-%% Primary API
--export([register_stat/4, alias/1, aliases/2, % Create
-        re_register/2, re_register/3,
-
-        get_datapoint/2, get_value/1, get_values/1, select_stat/1,  % Read
-        info/2, read_stats/1,
-
-        update_or_create/3, update_or_create/4, set_opts/2, % Update
-
-        unregister_stats/4, unregister_stat/1, reset_stat/1 % Delete
+%% API
+-export([
+  register_stat/4, alias/1, aliases/2, re_register/2,
+  read_stats/1, get_datapoint/2, get_value/1, get_values/1, select_stat/1, info/2,
+  update_or_create/3, update_or_create/4, set_opts/2,
+  unregister_stats/4, unregister_stat/1, reset_stat/1
 ]).
 
 %% Secondary API
@@ -30,41 +26,6 @@
 -define(PFX, riak_stat:prefix()).
 
 %%%%%%%%%%%%%% CREATING %%%%%%%%%%%%%%
-
-%%-spec(coordinate(Arg :: {atom(), term()}) ->
-%%  ok | term() | {error, Reason :: term()}).
-%%coordinate({Fun, Arg}) ->
-%%  coordinate(Fun, Arg).
-%%-spec(coordinate(Fun :: atom(), Arg :: {atom(), term()} | term()) ->
-%%  ok | term() | {error, Reason :: term()}).
-%%coordinate(Fun, Arg) ->
-%%  case Fun of
-%%    register ->
-%%      {StatName, Type, Opts, Aliases} = Arg,
-%%      register_stat(StatName, Type, Opts, Aliases);
-%%    update ->
-%%      {Name, UpdateVal, Type} = Arg,
-%%      update_or_create(Name, UpdateVal, Type);
-%%    read ->
-%%      read_stats(Arg);
-%%    unregister ->
-%%      {Mod, Idx, Type, App} = Arg,
-%%      unregister_stats(Mod, Idx, Type, App);
-%%    AFun ->
-%%      case Arg of
-%%        {Ar, Gu} ->
-%%          AFun(Ar, Gu);
-%%        {A, R, G} ->
-%%          AFun(A, R, G);
-%%        {An, Arg, U, Ment} ->
-%%          AFun(An, Arg, U, Ment);
-%%        [] ->
-%%          AFun();
-%%        Arg ->
-%%          AFun(Arg)
-%%      end
-%%  end.
-
 
 -spec(register_stat(StatName :: list(), Type :: atom(), Opts :: list(), Aliases :: term()) ->
   ok | {error, Reason :: term()}).
@@ -190,6 +151,18 @@ update_or_create(Name, UpdateVal, Type) ->
 update_or_create(Name, UpdateVal, Type, Opts) ->
   exometer:update_or_create(Name, UpdateVal, Type, Opts).
 
+-spec(change_status(Stats :: list() | term()) ->
+  ok | term()).
+%% @doc
+%% enable or disable the stats in the list
+%% @end
+change_status(Stats) when is_list(Stats) ->
+  lists:map(fun({Stat, {status, Status}}) ->
+    case Status of
+      enabled ->
+
+    end,
+
 -spec(set_opts(StatName :: list() | atom(), Opts :: list()) -> ok | term()).
 %% @doc
 %% Set the options for a stat in exometer, setting the status as either enabled or
@@ -228,11 +201,7 @@ reset_stat(StatName) ->
 timestamp() ->
   exometer_util:timestamp().
 
-
-
-
 %%%%%%%%%%%% Extras %%%%%%%%%%%%%%%
-
 
 %% @doc
 %% Used in testing in certain modules
@@ -386,3 +355,37 @@ print_stats(Stat, Attr) ->
 
 %%legacy_search(Stat, Type, ToStatus) ->
 %%  riak_stat_data:legacy_search(Stat, Type, ToStatus).
+
+%%-spec(coordinate(Arg :: {atom(), term()}) ->
+%%  ok | term() | {error, Reason :: term()}).
+%%coordinate({Fun, Arg}) ->
+%%  coordinate(Fun, Arg).
+%%-spec(coordinate(Fun :: atom(), Arg :: {atom(), term()} | term()) ->
+%%  ok | term() | {error, Reason :: term()}).
+%%coordinate(Fun, Arg) ->
+%%  case Fun of
+%%    register ->
+%%      {StatName, Type, Opts, Aliases} = Arg,
+%%      register_stat(StatName, Type, Opts, Aliases);
+%%    update ->
+%%      {Name, UpdateVal, Type} = Arg,
+%%      update_or_create(Name, UpdateVal, Type);
+%%    read ->
+%%      read_stats(Arg);
+%%    unregister ->
+%%      {Mod, Idx, Type, App} = Arg,
+%%      unregister_stats(Mod, Idx, Type, App);
+%%    AFun ->
+%%      case Arg of
+%%        {Ar, Gu} ->
+%%          AFun(Ar, Gu);
+%%        {A, R, G} ->
+%%          AFun(A, R, G);
+%%        {An, Arg, U, Ment} ->
+%%          AFun(An, Arg, U, Ment);
+%%        [] ->
+%%          AFun();
+%%        Arg ->
+%%          AFun(Arg)
+%%      end
+%%  end.

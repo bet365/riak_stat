@@ -19,15 +19,20 @@
 %% @end
 
 %% Console API
--export([show_stat_status/2, show_stat_0/1, show_stat_info/1,
-  disable_stat_0/1,
+-export([
+  show_stat_status/2, show_stat_0/1, show_stat_info/1,
+  disable_stat_0/1, reset_stat/1,
   change_stat_status/2]).
 
 %% Admin API
--export([]).
+-export([clean_data/2]).
 
 %% Profile API
--export([]).
+-export([
+  save_current_profile/1,
+  load_profile/1,
+  delete_profile/1,
+  reset_stats_and_profile/0]).
 
 %% Externally needed API
 -export([prefix/0]).
@@ -75,12 +80,24 @@ change_stat_status(Arg, ToStatus) ->
   riak_stat_console:status_change(Arg, ToStatus).
 
 reset_stat(Arg) ->
-  riak_stat_console(Arg).
+  riak_stat_console:reset_stat(Arg).
 
 
 %%%===================================================================
 %%% Admin API
 %%%===================================================================
+
+clean_data(Type, Data) ->
+  riak_stat_admin:clean_data({Type, Data}).
+
+
+
+
+
+
+
+
+%%%% +===+++++===++==++=+=======
 
 register(App, Stats) ->
   riak_stat_admin:register(prefix(), App, Stats).
@@ -142,19 +159,48 @@ unregister(Stat) ->
 %%% Profile API
 %%%===================================================================
 
-load_profile(Arg) ->
-  ok.
-
+-spec(save_current_profile(Arg :: term()) -> ok | term()).
+%% @doc
+%% Pull out the current stats status, and store the profile_name and
+%% list of stats into the metadata.
+%% All unregistered stats are stored as {status, unregistered}, but kept
+%% within the profile in case it becomes re_registered, it is defaulted to
+%% disabled.
+%% @end
 save_current_profile(Arg) ->
-  ok.
+  CleanArg = clean_profile_name(Arg),
+  riak_stat_profiles:save_profile(CleanArg).
 
+-spec(load_profile(Arg :: term()) -> ok | term() | {error, Reason :: term()}).
+%% @doc
+%% load a profile saved in the metadata, if the profile does not exist then
+%% {error, no_profile} is returned.
+%% @end
+load_profile(Arg) ->
+  CleanArg = clean_profile_name(Arg),
+  riak_stat_profiles:load_profile(CleanArg).
+
+-spec(delete_profile(Arg :: term()) -> ok | term() | {error, Reason :: term()}).
+%% @doc
+%% Deletes the profile in the metadata but does not reset the stats, that can
+%% be done manually with the function reset_profile, this just removes the
+%% snapshot of the stats from the metadata
+%% @end
 delete_profile(Arg) ->
-  ok.
+  CleanArg = clean_profile_name(Arg),
+  riak_stat_profiles:delete_profile(CleanArg).
 
-reset_stats_and_profile(Arg) ->
-  ok.
+-spec(reset_stats_and_profile() -> ok | {error, Reason :: term()}).
+%% @doc
+%% Resets all disabled stats back to enabled. If the stat has a status of
+%% {status, unregistered} then the stat is left as unregistered or disabled.
+%% if it has been enabled since the profile was loaded then it will not be affected.
+%% @end
+reset_stats_and_profile() ->
+  riak_stat_profiles:reset_profile().
 
-
+clean_profile_name(ProfileName) ->
+  clean_data(profiles, ProfileName).
 
 
 

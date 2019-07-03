@@ -9,11 +9,27 @@
 -module(riak_stat_data).
 -author("savannahallsop").
 
+%% Sanitising API
+-export([clean_profile_data/1]).
+
 %% API
 -export([sanitise_data/1, sanitise_func/1,
   find_entries/2]).
 
--define(PFX, riak_stat_admin:prefix()).
+-define(PFX, riak_stat:prefix()).
+
+
+clean_profile_data([]) ->
+  no_data;
+clean_profile_data([Data]) ->
+  clean_profile_data(Data);
+clean_profile_data(Data) when is_list(Data) ->
+  list_to_atom(Data);
+clean_profile_data(Data) when is_binary(Data) ->
+  binary_to_atom(Data, latin1);
+clean_profile_data(Data) when is_atom(Data) ->
+  Data.
+
 
 %% sanitise_data(Arg) ->
 %%

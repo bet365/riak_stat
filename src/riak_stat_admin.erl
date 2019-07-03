@@ -12,10 +12,12 @@
 -behaviour(gen_server).
 
 %% API
--export([]).
+-export([get_stats/0]).
 
 %% Data API
--export([find_entries/2]).
+-export([
+  clean_data/1,
+  find_entries/2]).
 
 %% Info API
 -export([print/2]).
@@ -46,9 +48,22 @@
 -record(state, {statstable}).
 
 %%%===================================================================
+%%% API
+%%%===================================================================
+
+get_stats() ->
+  gen_server:call(?SERVER, get_stats).
+
+%%%===================================================================
 %%% Data API
 %%%===================================================================
 
+clean_data({profile, Data}) ->
+  riak_stat_data:clean_profile_data(Data);
+clean_data({console, Data}) ->
+  riak_stat_data:clean_console_data(Data);
+clean_data(Data) ->
+  Data.
 
 %%%===================================================================
 %%% Info API
@@ -173,6 +188,9 @@ handle_call({register, {P, App, Stats}}, _From, State =#state{statstable = ETS})
 handle_call({unregister, Pfx, App, Mod, Idx, Type}, _From, State) ->
   unreg_stats(Pfx, App, Type, Mod, Idx),
   {reply, ok, State};
+handle_call(get_stats, _From, State = #state{statstable = Ets}) ->
+  TheStatsList = ets:tab2list(Ets),
+  {reply, TheStatsList, State};
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 

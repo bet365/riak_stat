@@ -12,18 +12,23 @@
 -behaviour(gen_server).
 
 %% API
--export([]).
+-export([
+  save_profile/1,
+  load_profile/1,
+  delete_profile/1,
+  reset_profile/0
+]).
 
 %% Admin Api
--export([]).
+-export([print_stats/1]).
 
 %% Coordinator API
--export([]).
+-export([
+  save_profile_in/1,
+  load_profile_in/1,
+  delete_profile_in/1,
+  reset_profile_in/0]).
 
-
-
-
--export([coordinate/2]).
 
 %% API
 -export([start_link/0]).
@@ -37,27 +42,96 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(TIME, vclock:fresh()).
 
 -record(state, {
   profile = none,
-  profilelist =[]
+  profilelist = []
 }).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec(coordinate(Fun :: term(), Arg :: term()) ->
-  ok | {error, Reason :: term()} | term()).
+-spec(save_profile(Data :: atom()) ->
+  Response :: term() | {error, Reason :: term()}).
 %% @doc
-%% coordinates the function calls from riak_core_console for profile
-%% requests,
-%% the function is checked in riak_stat_data if it is a function that
-%% actually exists, if not then {error, no_function_found} is returned
+%% Data comes in already sanitised so it is always an atom, unless
+%% nothing is entered, then the response is 'no_data'
+%% Saves the profile name in the metadata will all the current stats and
+%% their status as the value
 %% @end
-coordinate(Fun, Arg) ->
-  Fun1 = riak_stat_data:sanitise_func(Fun),
-  gen_server:call(?SERVER, {Fun1, Arg}).
+save_profile(no_data) ->
+  io:fwrite("No name chosen~n");
+save_profile(ProfileName) ->
+  gen_server:call(?SERVER, {save, ProfileName}),
+  io:fwrite("~p saved~n", [ProfileName]).
+
+-spec(load_profile(Data :: atom()) ->
+  Response :: term() | {error, Reason :: term()}).
+%% @doc
+%% load a profile saved in the metadata, If the profile is not there it
+%% will return {error, no_profile}, if nothing was entered it will return
+%% the statement below. Stats will be pulled out of the metadata and
+%% compared to the current status of the stats, It will only enabled the
+%% disabled and disable the enabled stats etc, any unregistered stats that
+%% are saved in the profile will do nothing.
+%% the return will be the stats that were enabled, and any unregistered stats
+%% that were saved
+%% @end
+load_profile(no_data) ->
+  io:fwrite("No profile name given~n");
+load_profile(ProfileName) ->
+  Reply = gen_server:call(?SERVER, {load, ProfileName}),
+  print_stats(Reply).
+
+-spec(delete_profile(Data :: atom()) ->
+  Response :: term() | {error, Reason :: term()}).
+%% @doc
+%% deletes the profile from the metadata and all its values but it does
+%% not affect the status of the stats, metadata does not remove an entry
+%% but does replace the data with a tombstone
+%% @end
+delete_profile(no_data) ->
+  io:fwrite("No profile name given~n");
+delete_profile(ProfileName) ->
+  gen_server:call(?SERVER, {delete, ProfileName}).
+
+-spec(reset_profile() -> term() | ok | {error, Reason :: term()}).
+%% @doc
+%% resets the profile so no profile is loaded and will enable all the
+%% disabled stats. it returns a ok if everything went ok, or
+%% {error, Reason} in case a stat breaks or a stat that is already enabled
+%% gets enabled again for example.
+reset_profile() ->
+  Reply = gen_server:call(?SERVER, reset),
+  print_stats(Reply).
+
+%%%===================================================================
+%%% Admin API
+%%%===================================================================
+
+print_stats(no_data) ->
+  io:fwrite("No data found~n");
+print_stats(Stats) ->
+  riak_stat_admin:print(Stats, []).
+
+%%%===================================================================
+%%% Coordinator API
+%%%===================================================================
+
+save_profile_in(ProfileName) ->
+  riak_stat_coordinator:coordinate(save_profile, ProfileName).
+
+load_profile_in(ProfileName) ->
+  riak_stat_coordinator:coordinate(load_profile, ProfileName).
+
+delete_profile_in(ProfileName) ->
+  riak_stat_coordinator:coordinate(delete_profile, ProfileName).
+
+reset_profile_in() ->
+  riak_stat_coordinator:coordinate(reset_profile).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -97,7 +171,6 @@ init([]) ->
   %% stats are enabled
 
   %% TODO: save the list of profile in state{profilelist=List}
-
   {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -115,30 +188,36 @@ init([]) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
-handle_call({load_profile, Arg}, _From, State) ->
-  Arg,
-  {reply, ok, State};
-handle_call({add_profile, Arg}, _From, State) ->
-  Arg,
-  {reply, ok, State};
-handle_call({add_profile_stat, Arg}, _From, State) ->
-  Arg,
-  {reply, ok, State};
-handle_call({remove_profile, Arg}, _From, State) ->
-  Arg,
-  {reply, ok, State};
-handle_call({remove_profile_stat, Arg}, _From, State) ->
-  Arg,
-  {reply, ok, State};
-handle_call({reset_profile, Arg}, _From, State) ->
-  Arg,
-  {reply, ok, State};
-handle_call({check_profile_stat, Arg}, _From, State) ->
-  Arg,
-  {reply, ok, State};
-handle_call({change_profile_stat, Arg}, _From, State) ->
-  Arg,
-  {reply, ok, State};
+
+handle_call({save, Arg}, _From, State = #state{profilelist = ProfileList}) ->
+  NewProfList = lists:keystore(Arg, 1, ProfileList, {Arg, ?TIME}),
+  Reply = save_profile_in(Arg),
+  {reply, Reply, State#state{profilelist = NewProfList}};
+handle_call({load, Arg}, _From, State = #state{profilelist = ProfileList}) ->
+  {Reply, NewState} =
+    case lists:keymember(Arg, 1, ProfileList) of
+      false ->
+        {[], State};
+      true ->
+        {load_profile_in(Arg),
+          State#state{profile = Arg}}
+    end,
+  {reply, Reply, NewState};
+handle_call({delete, Arg}, _From, State = #state{profilelist = ProfileList}) ->
+  {Reply, NewState} =
+  case lists:keymember(Arg, 1, ProfileList) of
+    false ->
+      {[], State};
+    true ->
+      {delete_profile_in(Arg),
+        State#state{
+          profilelist = lists:keydelete(Arg, 1, ProfileList)}}
+  end,
+  {reply, Reply, NewState};
+handle_call(reset, _From, State) ->
+  Reply = reset_profile_in(),
+  NewState = State#state{profile = none},
+  {reply, Reply, NewState};
 handle_call({Request, _Arg}, _From, State) ->
   {reply, {error, Request}, State};
 handle_call(Request, _From, State) ->
