@@ -1,6 +1,4 @@
 %%%-------------------------------------------------------------------
-%%% @author savannahallsop
-%%% @copyright (C) 2019, <COMPANY>
 %%% @doc
 %%%
 %%% @end
@@ -8,6 +6,12 @@
 %%%-------------------------------------------------------------------
 -module(riak_stat_exometer).
 -author("savannahallsop").
+
+%% TODO START
+
+% - go through the functions
+
+%% TODO END
 
 %% API
 -export([

@@ -20,7 +20,7 @@
 
 %% Console API
 -export([
-  show_stat_status/2, show_stat_0/1, show_stat_info/1,
+  show_stat_status/2, show_static_stats/1, show_stat_info/1,
   disable_stat_0/1, reset_stat/1,
   change_stat_status/2]).
 
@@ -51,34 +51,71 @@
 %%%===================================================================
 
 prefix() ->
-  app_helper:get_env(riak_core, stat_prefix, riak).
+  app_helper:get_env(riak_stat, stat_prefix, riak).
 
 %%%===================================================================
 %%% Console API
 %%%===================================================================
 
-
+-spec(show_stat_status(Arg :: term(), Status :: atom()) ->
+  term()).
+%% @doc
+%% A call of riak-admin stat show-enabled | show-disabled <entry>
+%% points to this function, it will by default go to metadata unless it
+%% is changed to exometer with set_default(Def)...
+%% It just returns a status or statuses of the entry or entries
+%% provided.
+%% @end
 show_stat_status(Arg, Status) ->
   riak_stat_console:show_stat(Arg, Status).
 
-show_stat_0(Arg) ->
+-spec(show_static_stats(Arg :: term()) -> term()).
+%% @doc
+%% A call from riak_core_console made through riak-admin of:
+%% riak-admin stat show-0 <entry> -> which returns the stats in
+%% exometer which have a value that is not updating.
+%% It will show which stats that are not being used.
+%%
+%% %% in exometer if it is not updating it will have a value of 0
+%% or []
+%% @end
+show_static_stats(Arg) ->
   riak_stat_console:show_stat_0(Arg). % todo: change to show_static_stats
 
+-spec(disable_stat_0(Arg :: term()) -> term()).
+%% @doc
+%% like the function above it will find the stats in exometer that are not
+%% updating but will in turn disable them in both the metadata and in
+%% exometer so the change is persisted
+%% @end
 disable_stat_0(Arg) ->
   riak_stat_console:disable_stat_0(Arg). % Todo: change to show disabled_stats
 
+-spec(show_stat_info(Arg :: term()) -> term()).
+%% @doc
+%% show the information that is kept in the metadata and in exometer for the stats
+%% given
+%% If the default is not metadata it will just return the information stored in
+%% exometer
+%% @end
 show_stat_info(Arg) ->
   riak_stat_console:stat_info(Arg).
 
-show_static_stats(Arg) ->
-  ok.
-
-show_disabled_stats(Arg) ->
-  ok.
-
+-spec(change_stat_status(Arg :: term(), ToStatus :: atom()) -> term()).
+%% @doc
+%% change the status of the stat in metadata and exometer, unless the default
+%% is not metadata and is set to exometer then the data goes to exometer
+%% only.
+%% @end
 change_stat_status(Arg, ToStatus) ->
   riak_stat_console:status_change(Arg, ToStatus).
 
+-spec(reset_stat(Arg :: term()) -> term()).
+%% @doc
+%% reset the stat in the metadata and in exometer, both the metadata
+%% and exometer keep history of the number of resets, except with the
+%% metadata the number of resets is persisted
+%% @end
 reset_stat(Arg) ->
   riak_stat_console:reset_stat(Arg).
 
@@ -86,18 +123,6 @@ reset_stat(Arg) ->
 %%%===================================================================
 %%% Admin API
 %%%===================================================================
-
-clean_data(Type, Data) ->
-  riak_stat_admin:clean_data({Type, Data}).
-
-
-
-
-
-
-
-
-%%%% +===+++++===++==++=+=======
 
 register(App, Stats) ->
   riak_stat_admin:register(prefix(), App, Stats).
@@ -119,6 +144,9 @@ update(Name, IncrBy, Type) -> % point to admin
   riak_stat_exometer:update_or_create(Name, IncrBy, Type).
 
 %% Unregistering
+
+unregister({Mod, Idx, Type, App}) ->
+  unregister(Mod, Idx, Type, App).
 
 unregister(Mod, Idx, Type, App) ->
   riak_stat_admin:unregister(prefix(), App ,Mod, Idx, Type).
@@ -148,10 +176,6 @@ set_options(Type, Options) ->
 
 delete_stat(Stat) ->
   ok.
-
-unregister(Stat) ->
-  ok.
-
 
 
 
@@ -199,8 +223,6 @@ delete_profile(Arg) ->
 reset_stats_and_profile() ->
   riak_stat_profiles:reset_profile().
 
-clean_profile_name(ProfileName) ->
-  clean_data(profiles, ProfileName).
 
 
 

@@ -12,7 +12,8 @@
 -behaviour(gen_server).
 
 %% API
--export([show_stat/2, show_stat_0/1, stat_info/1,
+-export([
+  show_stat/2, show_stat_0/1, stat_info/1,
   disable_stat_0/1, status_change/2, reset_stat/1]).
 
 %% Admin API
@@ -59,6 +60,7 @@
 %% otherwise use: riak-admin stat show-enabled | show-disabled
 %% @end
 show_stat(Arg, Status) ->
+
   Reply = gen_server:call(?SERVER, {show, Arg, Status}),
   print_stats(Reply, []).
 

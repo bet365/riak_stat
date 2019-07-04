@@ -9,6 +9,11 @@
 -module(riak_stat_coordinator).
 -author("savannahallsop").
 
+%% TODO: pull out of riak_stat the default,
+%% or have it passed into this module everytime the function is called.
+
+%% so when a function reaches this point its clear where it is going.
+
 %% API
 -export([coordinate/1, coordinate/2]).
 
@@ -24,7 +29,9 @@ coordinate(Fun, Arg) ->
   case Fun of
     alias -> alias(Arg);
     aliases -> aliases(Arg);
-
+    select -> select(Arg);
+    get_datapoint -> {Name, DP} = Arg, get_datapoint(Name, DP);
+    get_info -> {Name, Info} = Arg, get_info(Name, Info);
     get_app_stats -> get_stats(Arg);
     get_stat_info -> get_stat_info(Arg);
     get_stat_status -> get_current_meta_stats();
@@ -88,11 +95,20 @@ alias(Arg) ->
 aliases({Arg, Value}) ->
   riak_stat_exometer:aliases(Arg, Value).
 
+select(Arg) ->
+  riak_stat_exometer:select_stat(Arg).
+
 get_stats(Arg) ->
   riak_stat_exometer:read_stats(Arg).
 
 get_stat_info(Arg) ->
   riak_stat_exometer:get_value(Arg).
+
+get_info(Name, Info) ->
+  riak_stat_exometer:info(Name, Info).
+
+get_datapoint(Name, DP) ->
+  riak_stat_exometer:get_datapoint(Name, DP).
 
 register_exom_stat({StatName, Type, Opts, Aliases}) ->
   riak_stat_exometer:register_stat(StatName, Type, Opts, Aliases).

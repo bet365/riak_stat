@@ -46,7 +46,7 @@
 
 -record(state, {
   profile = none,
-  profilelist = []
+  profilelist
 }).
 
 %%%===================================================================
@@ -61,10 +61,9 @@
 %% Saves the profile name in the metadata will all the current stats and
 %% their status as the value
 %% @end
-save_profile(no_data) ->
-  io:fwrite("No name chosen~n");
 save_profile(ProfileName) ->
-  gen_server:call(?SERVER, {save, ProfileName}),
+  Name = parse_profile_name(ProfileName),
+  gen_server:call(?SERVER, {save, Name}),
   io:fwrite("~p saved~n", [ProfileName]).
 
 -spec(load_profile(Data :: atom()) ->
@@ -79,11 +78,10 @@ save_profile(ProfileName) ->
 %% the return will be the stats that were enabled, and any unregistered stats
 %% that were saved
 %% @end
-load_profile(no_data) ->
-  io:fwrite("No profile name given~n");
 load_profile(ProfileName) ->
-  Reply = gen_server:call(?SERVER, {load, ProfileName}),
-  print_stats(Reply).
+  Name = parse_profile_name(ProfileName),
+  Reply = gen_server:call(?SERVER, {load, Name}),
+  print(Reply).
 
 -spec(delete_profile(Data :: atom()) ->
   Response :: term() | {error, Reason :: term()}).
@@ -92,10 +90,9 @@ load_profile(ProfileName) ->
 %% not affect the status of the stats, metadata does not remove an entry
 %% but does replace the data with a tombstone
 %% @end
-delete_profile(no_data) ->
-  io:fwrite("No profile name given~n");
 delete_profile(ProfileName) ->
-  gen_server:call(?SERVER, {delete, ProfileName}).
+  Name = parse_profile_name(ProfileName),
+  gen_server:call(?SERVER, {delete, Name}).
 
 -spec(reset_profile() -> term() | ok | {error, Reason :: term()}).
 %% @doc
@@ -105,15 +102,24 @@ delete_profile(ProfileName) ->
 %% gets enabled again for example.
 reset_profile() ->
   Reply = gen_server:call(?SERVER, reset),
-  print_stats(Reply).
+  print(Reply).
 
 %%%===================================================================
 %%% Admin API
 %%%===================================================================
 
-print_stats(no_data) ->
+parse_profile_name([]) ->
+  no_data;
+parse_profile_name(ProfileName) ->
+  {Name, _EP, _Stuff} =
+    riak_stat_admin:parse_information(ProfileName, []),
+  Name.
+
+print({error, Reason}) ->
+  print(Reason);
+print(no_data) ->
   io:fwrite("No data found~n");
-print_stats(Stats) ->
+print(Stats) ->
   riak_stat_admin:print(Stats, []).
 
 %%%===================================================================
@@ -132,6 +138,8 @@ delete_profile_in(ProfileName) ->
 reset_profile_in() ->
   riak_stat_coordinator:coordinate(reset_profile).
 
+pull_profiles() ->
+  riak_stat_coordinator:coordinate(pull_profiles).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -142,7 +150,6 @@ reset_profile_in() ->
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  %% TODO: the list of profiles and their stats are passed in
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
@@ -164,13 +171,16 @@ start_link() ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
-  %% TODO: take the input for init and go through the profile status,
-  %% if the status is enabled, then set the state{profile=thatprofile
-
-  %% TODO:also send the list of stats to the metadata to check that the right
-  %% stats are enabled
-
-  %% TODO: save the list of profile in state{profilelist=List}
+%%  Stats = pull_profiles(),
+%%  Tid =                    % create ets for profiles
+%%    ets:new(profiles, [
+%%      set,
+%%      protected,
+%%      {keypos, 1},
+%%      {write_concurrency, true},
+%%      {read_concurrency, true}
+%%    ]),
+%%  ets:insert(Tid, Stats),
   {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -180,6 +190,11 @@ init([]) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
+
+%% TOdo: change the profile list to an ets?
+%% instead of a list.
+%% or pull the profiles out of metadata and store in this list, however this seems
+%% mostly pointless as it can be just done on metadata end.
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
   {reply, Reply :: term(), NewState :: #state{}} |
@@ -188,7 +203,8 @@ init([]) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
-
+handle_call({_Fun, no_data}, _From, State) ->
+  {reply, {error, no_data}, State};
 handle_call({save, Arg}, _From, State = #state{profilelist = ProfileList}) ->
   NewProfList = lists:keystore(Arg, 1, ProfileList, {Arg, ?TIME}),
   Reply = save_profile_in(Arg),
@@ -205,14 +221,14 @@ handle_call({load, Arg}, _From, State = #state{profilelist = ProfileList}) ->
   {reply, Reply, NewState};
 handle_call({delete, Arg}, _From, State = #state{profilelist = ProfileList}) ->
   {Reply, NewState} =
-  case lists:keymember(Arg, 1, ProfileList) of
-    false ->
-      {[], State};
-    true ->
-      {delete_profile_in(Arg),
-        State#state{
-          profilelist = lists:keydelete(Arg, 1, ProfileList)}}
-  end,
+    case lists:keymember(Arg, 1, ProfileList) of
+      false ->
+        {[], State};
+      true ->
+        {delete_profile_in(Arg),
+          State#state{
+            profilelist = lists:keydelete(Arg, 1, ProfileList)}}
+    end,
   {reply, Reply, NewState};
 handle_call(reset, _From, State) ->
   Reply = reset_profile_in(),
