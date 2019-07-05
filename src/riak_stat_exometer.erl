@@ -7,17 +7,11 @@
 -module(riak_stat_exometer).
 -author("savannahallsop").
 
-%% TODO START
-
-% - go through the functions
-
-%% TODO END
-
 %% API
 -export([
   register_stat/4, alias/1, aliases/2, re_register/2,
   read_stats/1, get_datapoint/2, get_value/1, get_values/1, select_stat/1, info/2,
-  update_or_create/3, update_or_create/4, set_opts/2,
+  update_or_create/3, update_or_create/4, change_status/1, set_opts/2,
   unregister_stats/4, unregister_stat/1, reset_stat/1
 ]).
 
@@ -27,24 +21,40 @@
 %% additional API
 -export([start/0, stop/0]).
 
+-type statname()  :: atom() | list().
+-type type()      :: atom() | tuple().
+-type options()   :: list().
+-type aliases()   :: list() | atom() | tuple().
+-type datapoint() :: list() | atom() | tuple().
+-type value()     :: any().
+-type exo_value() :: {ok, value()}.
+-type reason()    :: no_template | exists | not_found | any().
+-type error()     :: {error, reason()}.
+-type acc()       :: any().
+-type pattern()   :: ets:match_spec().
+-type timestamp() :: non_neg_integer().
+-type info() :: name | type | module | value | cache
+| status | timestamp | options | ref | datapoints | entry.
+
+
 -define(PFX, riak_stat:prefix()).
 
 %%%%%%%%%%%%%% CREATING %%%%%%%%%%%%%%
 
--spec(register_stat(StatName :: list(), Type :: atom(), Opts :: list(), Aliases :: term()) ->
-  ok | {error, Reason :: term()}).
+-spec(register_stat(statname(), type(), options(), aliases()) ->
+  ok | error()).
 %% @doc
 %% Registers all stats, using exometer:re_register/3, any stat that is
 %% re_registered overwrites the previous entry, works the same as
-%% exometer:new/3 except it will ont return an error if the stat already
+%% exometer:new/3 except it wont return an error if the stat already
 %% is registered.
 %% @end
 register_stat(StatName, Type, Opts, Aliases) ->
-  re_register(StatName, Type, Opts), %% returns -> ok.
   lists:foreach(
     fun({DP, Alias}) ->
       aliases(new, [Alias, StatName, DP]) %% returns -> ok | {error, Reason}
-    end, Aliases).
+    end, Aliases),
+  re_register(StatName, Type, Opts). %% returns -> ok.
 
 re_register(StatName, Type) ->
   re_register(StatName, Type, []).
@@ -52,7 +62,8 @@ re_register(StatName, Type) ->
 re_register(StatName, Type, Opts) ->
   exometer:re_register(StatName, Type, Opts).
 
--spec(alias(Group :: term()) -> ok | term()).
+
+-spec(alias(Group :: term()) -> ok | acc()).
 alias(Group) ->
   lists:keysort(
     1,
@@ -75,7 +86,7 @@ alias(Group) ->
         end
       end, [], orddict:to_list(Group))).
 
--spec(aliases(Type :: atom(), Entry :: term()) -> ok | term()).
+-spec(aliases(Type :: atom(), Entry :: list()) -> ok | acc() | error()).
 %% @doc
 %% goes to exometer_alias and performs the type of alias function specified
 %% @end
@@ -93,7 +104,7 @@ alias_fun() ->
 
 %%%%%%%%%%%%%% READING %%%%%%%%%%%%%%
 
--spec(read_stats(App :: atom()) -> term() | {error, Reason :: term()}).
+-spec(read_stats(App :: atom()) -> value() | error()).
 %% @doc
 %% read the stats from exometer and print them out in the format needed, uses
 %% exometer functions.
@@ -102,14 +113,14 @@ read_stats(App) ->
   Values = get_values([?PFX, App]),
   [print_stats(Name, [status]) || {Name, _V} <- Values].
 
--spec(get_datapoint(Name :: term(), Datapoint :: term()) -> term()).
+-spec(get_datapoint(statname(), datapoint()) -> exo_value() | error()).
 %% @doc
 %% Retrieves the datapoint value from exometer
 %% @end
 get_datapoint(Name, Datapoint) ->
   exometer:get_value(Name, Datapoint).
 
--spec(get_value(Stat :: list()) -> ok | term()).
+-spec(get_value(statname()) -> exo_value() | error()).
 %% @doc
 %% Same as the function above, except in exometer the Datapoint:
 %% 'default' is inputted, however it is used by some modules
@@ -117,7 +128,7 @@ get_datapoint(Name, Datapoint) ->
 get_value(S) ->
   exometer:get_value(S).
 
--spec(get_values(Path :: any()) -> term()).
+-spec(get_values(Path :: any()) -> exo_value() | error()).
 %% @doc
 %% The Path is the start or full name of the stat(s) you wish to find,
 %% i.e. [riak,riak_kv] as a path will return stats with those to elements
@@ -126,14 +137,14 @@ get_value(S) ->
 get_values(Path) ->
   exometer:get_values(Path).
 
--spec(select_stat(Pattern :: term()) -> term()).
+-spec(select_stat(pattern()) -> list()).
 %% @doc
 %% Find the stat in exometer using this pattern
 %% @end
 select_stat(Pattern) ->
   exometer:select(Pattern).
 
--spec(info(Name :: list() | term(), Type :: atom() | term()) -> term()).
+-spec(info(statname(), info()) -> value()).
 %% @doc
 %% find information about a stat on a specific item
 %% @end
@@ -142,8 +153,8 @@ info(Name, Type) ->
 
 %%%%%%%%%%%%%% UPDATING %%%%%%%%%%%%%%
 
--spec(update_or_create(Name :: term(), UpdateVal :: any(), Type :: atom() | term()) ->
-  ok | term()).
+-spec(update_or_create(statname(), value(), type()) ->
+  ok | error()).
 %% @doc
 %% Sends the stat to exometer to get updated, unless it is not already a stat then it
 %% will be created. First it is checked in meta_mgr and registered there.
@@ -161,16 +172,20 @@ update_or_create(Name, UpdateVal, Type, Opts) ->
 %% enable or disable the stats in the list
 %% @end
 change_status(Stats) when is_list(Stats) ->
-  lists:map(fun({Stat, {status, Status}}) ->
-    case Status of
-      enabled ->
+  lists:map(fun
+              ({Stat, {status, Status}}) -> change_status(Stat, Status);
+              ({Stat, Status}) ->           change_status(Stat, Status)
+            end, Stats);
+change_status({Stat, Status}) ->
+  change_status(Stat, Status).
+change_status(Stat, Status) ->
+  set_opts(Stat, [{status, Status}]).
 
-    end,
 
--spec(set_opts(StatName :: list() | atom(), Opts :: list()) -> ok | term()).
+-spec(set_opts(statname(), options()) -> ok | error()).
 %% @doc
 %% Set the options for a stat in exometer, setting the status as either enabled or
-%% disabled in it's options in exometers will change its status in the entry
+%% disabled in it's options in exometer will change its status in the entry
 %% @end
 set_opts(StatName, Opts) ->
   exometer:setopts(StatName, Opts).
@@ -182,14 +197,14 @@ unregister_stats([Op, time], Idx, Type, App) ->
 unregister_stats(Mod, Idx, Type, App) ->
   unregister_stat([?PFX, App, Type, Mod, Idx]).
 
--spec(unregister_stat(StatName :: term()) -> ok | term() | {error, Reason :: term()}).
+-spec(unregister_stat(statname()) -> ok | error()).
 %% @doc
 %% deletes the stat entry from exometer
 %% @end
 unregister_stat(StatName) ->
   exometer:delete(StatName).
 
--spec(reset_stat(StatName :: term()) -> ok | term()).
+-spec(reset_stat(statname()) -> ok | error()).
 %% @doc
 %% resets the stat in exometer
 %% @end
@@ -198,7 +213,7 @@ reset_stat(StatName) ->
 
 %%%%%%%%%%%% Helper Functions %%%%%%%%%%%
 
--spec(timestamp() -> term()).
+-spec(timestamp() -> timestamp()).
 %% @doc
 %% Returns the timestamp to put in the stat entry
 %% @end
@@ -216,180 +231,7 @@ start() ->
 stop() ->
   exometer:stop().
 
+%% ADMIN
+
 print_stats(Stat, Attr) ->
   riak_stat_info:print(Stat, Attr).
-
-
-
-
-
-
-%%select(Pattern) ->
-%%  exometer:select(Pattern).
-%%
-%%find_entries({Arg, Status}) ->
-%%  find_entries(Arg, Status).
-%%
-%%find_entries(Arg, ToStatus) ->
-%%  lists:map(fun(Stat) ->
-%%%%    {S, Type, Status, DPs} = type_status_and_dps(Stat, ToStatus),
-%%%%    case Stat of
-%%%%      "[" ++ _ ->
-%%%%        {find_patterns(S, Type, Status), DPs};
-%%%%      _ ->
-%%
-%%    %% TODO: call into type_status_and_dps
-%%    Type = '_',
-%%    DPs = default,
-%%        case legacy_search(Stat, Type, ToStatus) of
-%%          false ->
-%%            {find_patterns(Stat, Type, ToStatus), DPs};
-%%          Found ->
-%%            {Found, DPs}
-%%        end
-%%%%    end
-%%            end, Arg).
-%%
-%%
-%%
-%%find_patterns(Stat, Type, Status) ->
-%%  Pattern = lists:flatten([riak_stat_data:sani_data_for_patterns(Stat, Type, Status)]),
-%%  select(Pattern).
-%%
-%%%% TODO: change this for the new Arg type
-%%legacy_search(S, Type, Status) ->
-%%  case re:run(S, "\\.", []) of
-%%    {match,_} ->
-%%      false;
-%%    nomatch ->
-%%      Re = <<"^", (make_re(S))/binary, "$">>,
-%%      [{S, legacy_search_1(Re, Type, Status)}]
-%%  end.
-%%
-%%make_re(S) ->
-%%  repl(split_pattern(S, [])).
-%%
-%%legacy_search_1(N, Type, Status) ->
-%%  Found = aliases(regexp_foldr, [N]),
-%%  lists:foldr(
-%%    fun({Entry, DPs}, Acc) ->
-%%      case match_type(Entry, Type) of
-%%        true ->
-%%          DPnames = [D || {D,_} <- DPs],
-%%          case get_datapoint(Entry, DPnames) of
-%%            {ok, Values} when is_list(Values) ->
-%%              [{Entry, zip_values(Values, DPs)} | Acc];
-%%            {ok, disabled} when Status=='_';
-%%              Status==disabled ->
-%%              [{Entry, zip_disabled(DPs)} | Acc];
-%%            _ ->
-%%              [{Entry, [{D,undefined} || D <- DPnames]}|Acc]
-%%          end;
-%%        false ->
-%%          Acc
-%%      end
-%%    end, [], orddict:to_list(Found)).
-%%
-%%match_type(_, '_') ->
-%%  true;
-%%match_type(Name, T) ->
-%%  T == get_info(Name, type).
-%%
-%%zip_values([{D,V}|T], DPs) ->
-%%  {_,N} = lists:keyfind(D, 1, DPs),
-%%  [{D,V,N}|zip_values(T, DPs)];
-%%zip_values([], _) ->
-%%  [].
-%%
-%%zip_disabled(DPs) ->
-%%  [{D,disabled,N} || {D,N} <- DPs].
-%%
-%%repl([single|T]) ->
-%%  <<"[^_]*", (repl(T))/binary>>;
-%%repl([double|T]) ->
-%%  <<".*", (repl(T))/binary>>;
-%%repl([H|T]) ->
-%%  <<H/binary, (repl(T))/binary>>;
-%%repl([]) ->
-%%  <<>>.
-%%
-%%split_pattern(<<>>, Acc) ->
-%%  lists:reverse(Acc);
-%%split_pattern(<<"**", T/binary>>, Acc) ->
-%%  split_pattern(T, [double|Acc]);
-%%split_pattern(<<"*", T/binary>>, Acc) ->
-%%  split_pattern(T, [single|Acc]);
-%%split_pattern(B, Acc) ->
-%%  case binary:match(B, <<"*">>) of
-%%    {Pos,_} ->
-%%      <<Bef:Pos/binary, Rest/binary>> = B,
-%%      split_pattern(Rest, [Bef|Acc]);
-%%    nomatch ->
-%%      lists:reverse([B|Acc])
-%%  end.
-%%
-%%get_info(Name, Info) ->
-%%  case riak_stat_exometer:get_info(Name, Info) of
-%%    undefined ->
-%%      [];
-%%    Other ->
-%%      Other
-%%  end.
-%%
-%%-spec(aliases(Type :: atom(), Entry :: term()) -> ok | term()).
-%%%% @doc
-%%%% goes to exometer_alias and performs the type of alias function specified
-%%%% @end
-%%aliases(new, [Alias, StatName, DP]) ->
-%%  exometer_alias:new(Alias, StatName, DP);
-%%aliases(prefix_foldl, []) ->
-%%  exometer_alias:prefix_foldl(<<>>, alias_fun(), orddict:new());
-%%aliases(regexp_foldr, [N]) ->
-%%  exometer_alias:regexp_foldr(N, alias_fun(), orddict:new()).
-%%
-%%alias_fun() ->
-%%  fun(Alias, Entry, DP, Acc) ->
-%%    orddict:append(Entry, {DP, Alias}, Acc)
-%%  end.
-%%
-%%
-%%get_datapoint(Name, DP) ->
-%%  exometer:get_value(Name, DP).
-
-
-%%legacy_search(Stat, Type, ToStatus) ->
-%%  riak_stat_data:legacy_search(Stat, Type, ToStatus).
-
-%%-spec(coordinate(Arg :: {atom(), term()}) ->
-%%  ok | term() | {error, Reason :: term()}).
-%%coordinate({Fun, Arg}) ->
-%%  coordinate(Fun, Arg).
-%%-spec(coordinate(Fun :: atom(), Arg :: {atom(), term()} | term()) ->
-%%  ok | term() | {error, Reason :: term()}).
-%%coordinate(Fun, Arg) ->
-%%  case Fun of
-%%    register ->
-%%      {StatName, Type, Opts, Aliases} = Arg,
-%%      register_stat(StatName, Type, Opts, Aliases);
-%%    update ->
-%%      {Name, UpdateVal, Type} = Arg,
-%%      update_or_create(Name, UpdateVal, Type);
-%%    read ->
-%%      read_stats(Arg);
-%%    unregister ->
-%%      {Mod, Idx, Type, App} = Arg,
-%%      unregister_stats(Mod, Idx, Type, App);
-%%    AFun ->
-%%      case Arg of
-%%        {Ar, Gu} ->
-%%          AFun(Ar, Gu);
-%%        {A, R, G} ->
-%%          AFun(A, R, G);
-%%        {An, Arg, U, Ment} ->
-%%          AFun(An, Arg, U, Ment);
-%%        [] ->
-%%          AFun();
-%%        Arg ->
-%%          AFun(Arg)
-%%      end
-%%  end.

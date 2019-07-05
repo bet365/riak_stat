@@ -11,16 +11,6 @@
 
 -include("riak_core_metadata.hrl").
 
-%% TODO START
-
-% - create a function that will reset all the resets in the metadata stats
-
-% - Create a Eunit test for the Api
-% - create a Eunit test for the basic Api
-% - create a Eunit test for the Profile Api
-
-%% TODO END
-
 %% Basic API
 -export([
   get/2,
@@ -38,8 +28,7 @@
 %% Admin API
 -export([
   register_stat/4, register_stat/1,
-  unregister/1,
-  reset_stat/1
+  unregister/1, reset_stat/1, reset_resets/0
 ]).
 
 %% Profile API
@@ -48,7 +37,20 @@
   save_profile/1,
   load_profile/1,
   delete_profile/1,
-  reset_profile/0]).
+  reset_profile/0
+]).
+
+-type reason()        :: unregistered | no_stat | no_status | any().
+-type error()         :: {error, reason() | profileerror()}.
+-type status()        :: enabled | disabled | unregistered.
+-type opt_tuple()     :: {atom(), any()}.
+-type options()       :: list() | opt_tuple().
+-type type()          :: atom() | list().
+-type aliases()       :: list() | atom() | tuple().
+-type profilename()   :: atom().
+-type profileerror()  :: no_stats | profile_exists_already.
+-type stats()         :: list().
+
 
 -define(PFX, riak_stat:prefix()).
 -define(STAT, stats).
@@ -64,20 +66,19 @@
 %%% Basic API
 %%%===================================================================
 
--spec(get(Prefix :: metadata_prefix(), Key :: metadata_key()) -> metadata_value()).
+-spec(get(metadata_prefix(), metadata_key()) -> metadata_value() | undefined).
 %% @doc Get the data from the riak_core_metadata @end
 get(Prefix, Key) ->
   riak_core_metadata:get(Prefix, Key).
 
--spec(put(Prefix :: metadata_prefix(), Key :: metadata_key(),
-    Value :: metadata_value(), Opts :: term()) -> ok).
+-spec(put(metadata_prefix(), metadata_key(), metadata_value() | metadata_modifier(), put_opts()) -> ok).
 %% @doc put the data into the metadata @end
 put(Prefix, Key, Value) ->
   put(Prefix, Key, Value, []).
 put(Prefix, Key, Value, Opts) ->
   riak_core_metadata:put(Prefix, Key, Value, Opts).
 
--spec(delete(Prefix :: metadata_prefix(), Key :: metadata_key()) -> ok).
+-spec(delete(metadata_prefix(), metadata_key()) -> ok).
 %% @doc deleting the key from the metadata replaces values with tombstone @end
 delete(Prefix, Key) ->
   riak_core_metadata:delete(Prefix, Key).
@@ -86,7 +87,7 @@ delete(Prefix, Key) ->
 %%% API
 %%%===================================================================
 
--spec(check_meta(PrefixKey :: metadata_pkey()) -> metadata_value()).
+-spec(check_meta(metadata_pkey()) -> metadata_value()).
 %% @doc
 %% Checks the metadata for the pkey provided
 %% returns [] | Value
@@ -118,7 +119,7 @@ find_unregister_status(_PN, _Stats) ->
 
 %%%%%%%%%% READING OPTS %%%%%%%%%%%%
 
--spec(check_status(StatName :: metadata_key()) -> metadata_value() | {error, Reason :: term()}).
+-spec(check_status(metadata_key()) -> metadata_value() | error()).
 %% @doc
 %% Returns the status of the stat saved in the metadata
 %% @end
@@ -130,12 +131,11 @@ check_status(StatName) ->
       {error, no_status};
     Value ->
       Status = find_unregister_status(StatName, Value),
-          {StatName, {status, Status}}
+      {StatName, {status, Status}}
   end.
 
 
-
--spec(change_status(Statname :: metadata_key(), ToStatus :: atom()) -> ok | term()).
+-spec(change_status(metadata_key(), status()) -> ok).
 %% @doc
 %% Changes the status in the metadata
 %% @end
@@ -147,15 +147,14 @@ change_status(Stats) when is_list(Stats) ->
 change_status({StatName, Status}) ->
   change_status(StatName, Status).
 change_status(Statname, ToStatus) ->
-%%  {_T, Opts, _A} =
-    case check_meta(?STATKEY(Statname)) of
-      [] ->
-        ok;
-      unregistered ->
-        ok;
-      {Type, Opts, Aliases} ->
-        change_status_in_opts({Statname, Type, Opts, Aliases}, ToStatus)
-    end.
+  case check_meta(?STATKEY(Statname)) of
+    [] ->
+      ok;
+    unregistered ->
+      ok;
+    {Type, Opts, Aliases} ->
+      change_status_in_opts({Statname, Type, Opts, Aliases}, ToStatus)
+  end.
 
 change_status_in_opts(StatInfo, NewStatus) ->
   NewOpts = {status, NewStatus},
@@ -164,8 +163,7 @@ change_status_in_opts(StatInfo, NewStatus) ->
 
 %%%%%%%%%% SET OPTIONS %%%%%%%%%%%%%
 
--spec(set_options(StatName :: metadata_key(), NewOpts :: list() | tuple()) ->
-  ok | term() | {error, Reason :: term()}).
+-spec(set_options(metadata_key(), options()) -> ok).
 %% @doc
 %% Setting the options in the metadata manually, such as
 %% {status, enabled | disabled | unregistered} etc...
@@ -175,9 +173,9 @@ set_options(StatInfo, NewOpts) when is_list(NewOpts) ->
     set_options(StatInfo, {Key, NewVal})
                 end, NewOpts);
 set_options({Statname, Type, Opts, Aliases}, {Key, NewVal}) ->
-      NewOpts = lists:keyreplace(Key, 1, Opts, {Key, NewVal}),
-      NewOpts2 = fresh_clock(NewOpts),
-      set_options(Statname, Type, NewOpts2, Aliases).
+  NewOpts = lists:keyreplace(Key, 1, Opts, {Key, NewVal}),
+  NewOpts2 = fresh_clock(NewOpts),
+  set_options(Statname, Type, NewOpts2, Aliases).
 
 set_options(StatName, Type, NewOpts, Aliases) ->
   re_register_stat(StatName, Type, NewOpts, Aliases).
@@ -204,8 +202,7 @@ vc_inc(Count) -> Count + 1.
 
 register_stat({StatName, Type, Opts, Aliases}) ->
   register_stat(StatName, Type, Opts, Aliases).
--spec(register_stat(StatName :: metadata_key(), Type :: atom() | term(), Opts :: list(), Aliases :: term()) ->
-  ok | term() | {error, Reason :: term()}).
+-spec(register_stat(metadata_key(), type(), options(), aliases()) -> ok | options()).
 %% @doc
 %% Checks if the stat is already registered in the metadata, if not it
 %% registers it, and pulls out the options for the status and sends it
@@ -244,7 +241,7 @@ find_status(MetaOpts) ->
 
 %%%%%%%%%% UNREGISTERING %%%%%%%%%%%%
 
--spec(unregister(StatName :: term()) -> ok | term()).
+-spec(unregister(metadata_key()) -> ok).
 %% @doc
 %% Marks the stats as unregistered, that way when a node is restarted and registers the
 %% stats it will ignore stats that are marked unregistered
@@ -260,7 +257,7 @@ unregister(Statname) ->
 
 %%%%%%%%% RESETTING %%%%%%%%%%%
 
--spec(reset_stat(Statname :: metadata_key()) -> ok | term()).
+-spec(reset_stat(metadata_key()) -> ok | error()).
 %% @doc
 %% reset the stat in exometer and notify exometer of its reset
 %% @end
@@ -277,12 +274,24 @@ reset_stat(Statname) ->
 
 reset_inc(Count) -> Count + 1.
 
+-spec(reset_resets() -> ok).
+%% @doc
+%% sometimes the reset count just gets too high, and for every single
+%% stat its a bit much
+%% @end
+reset_resets() ->
+  Stats = get_current_stats(),
+  lists:foreach(fun({Stat, {status, _Status}}) ->
+    {Type, Opts, Aliases} = check_meta(?STATKEY(Stat)),
+    set_options({Stat, Type, Opts, Aliases}, {resets, 0})
+                end, Stats).
+
 
 %%%===================================================================
 %%% Profile API
 %%%===================================================================
 
--spec(get_current_stats() -> term()).
+-spec(get_current_stats() -> stats()).
 %% @doc
 %% retrieving the stats out of the metadata isn't as easy as just giving
 %% the prefix, the stats names are stored in riak_stat_admin in an ets
@@ -297,9 +306,7 @@ get_current_stats() ->
               end, [], Stats).
 
 
-
--spec(save_profile(ProfileName :: atom()) ->
-  term() | {error, Reason :: term()}).
+-spec(save_profile(profilename()) -> ok | error()).
 %% @doc
 %% Take the stats and their status out of the metadata for the current
 %% node and save it into the metadata as a profile
@@ -318,8 +325,7 @@ register_profile(ProfileName, Stats) ->
 
 
 
--spec(load_profile(ProfileName :: atom()) ->
-  term() | {error, Reason :: term()}).
+-spec(load_profile(profilename()) -> ok | error()).
 %% @doc
 %% Find the profile in the metadata and pull out stats to change them
 %% It will compare the current stats with the profile stats and will
@@ -343,7 +349,7 @@ compare_stats(CurrentMetaStats, ProfileStats) ->
   the_alpha_stat(ProfileStats, CurrentMetaStats).
 
 the_alpha_stat(Alpha, Beta) ->
-  Raw =riak_stat_admin:the_alpha_stat(Alpha, Beta),
+  Raw = riak_stat_admin:the_alpha_stat(Alpha, Beta),
   reverse(Raw).
 
 reverse(RawData) ->
@@ -351,7 +357,7 @@ reverse(RawData) ->
               ({Stat, {atom, {status, Status}}}) -> {Stat, {status, Status}};
               ({Stat, {atom, Val}}) -> {Stat, Val};
               ({Stat, {Atom, Val}}) -> {Stat, {Atom, Val}}
-              end, RawData).
+            end, RawData).
 
 change_stat_status(Stats) ->
   ToChange =
@@ -367,9 +373,7 @@ change_stat_status(Stats) ->
   riak_stat_coordinator:coordinate(change_status, ToChange).
 
 
-
--spec(delete_profile(ProfileName :: atom()) ->
-  term() | {error, Reason :: term()}).
+-spec(delete_profile(profilename()) -> ok).
 %% @doc
 %% Deletes the profile from the metadata, however currently the metadata
 %% returns a tombstone for the profile, it can be overwritten when a new profile
@@ -383,8 +387,7 @@ delete_p(Profile) ->
   delete({?PROFID, ?PROF}, Profile).
 
 
-
--spec(reset_profile() -> ok | term() | {error, Reason :: term()}).
+-spec(reset_profile() -> ok).
 %% @doc
 %% resets the profile by enabling all the stats, pulling out all the stats that
 %% are disabled in the metadata and then changing them to enabled in both the
@@ -397,8 +400,8 @@ reset_profile() ->
 
 find_stats(Stats, Status) ->
   lists:foldl(
-    fun({Stat, St}, Acc) when St == Status ->
+    fun({Stat, {status, St}}, Acc) when St == Status ->
       [{Stat, St} | Acc];
-      ({_Stat, St}, Acc) when St =/= Status ->
+      ({_Stat, {status, St}}, Acc) when St =/= Status ->
         Acc
     end, [], Stats).
