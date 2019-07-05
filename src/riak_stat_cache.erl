@@ -1,16 +1,21 @@
 %%%-------------------------------------------------------------------
-%%% @author savannahallsop
-%%% @copyright (C) 2019, <COMPANY>
 %%% @doc
 %%%
 %%% @end
 %%% Created : 25. Jun 2019 14:41
 %%%-------------------------------------------------------------------
 -module(riak_stat_cache).
--author("savannahallsop").
 
 %% API
--export([]).
+-export([check_cache/2, write_cache/3, delete_cache/2]).
 
-%% Coordinator API
--export([]).
+-define(TTL, 300000). % 5min
+
+check_cache(Name, DP) ->
+  riak_stat_coordinator:read_cache(Name, DP).
+
+write_cache(Name, DP, Val) ->
+  riak_stat_coordinator:write_cache(Name, DP, Val, ?TTL).
+
+delete_cache(Name, DP) ->
+  riak_stat_coordinator:delete_cache(Name, DP).

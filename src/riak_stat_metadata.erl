@@ -34,6 +34,7 @@
 %% Profile API
 -export([
   get_current_stats/0,
+  get_profiles/0,
   save_profile/1,
   load_profile/1,
   delete_profile/1,
@@ -50,7 +51,7 @@
 -type profilename()   :: atom().
 -type profileerror()  :: no_stats | profile_exists_already.
 -type stats()         :: list().
-
+-type acc()           :: any().
 
 -define(PFX, riak_stat:prefix()).
 -define(STAT, stats).
@@ -135,30 +136,34 @@ check_status(StatName) ->
   end.
 
 
--spec(change_status(metadata_key(), status()) -> ok).
+-spec(change_status(metadata_key(), status()) -> ok | acc()).
 %% @doc
 %% Changes the status in the metadata
 %% @end
 change_status(Stats) when is_list(Stats) ->
-  lists:map(fun
-              ({Stat, {status, Status}}) -> change_status(Stat, Status);
-              ({Stat, Status}) -> change_status(Stat, Status)
-            end, Stats);
+  lists:foldl(fun
+              ({Stat, {status, Status}}, Acc) ->
+                [change_status(Stat, Status) | Acc];
+              ({Stat, Status}, Acc) ->
+                [change_status(Stat, Status) | Acc]
+            end, [], Stats);
 change_status({StatName, Status}) ->
   change_status(StatName, Status).
 change_status(Statname, ToStatus) ->
   case check_meta(?STATKEY(Statname)) of
     [] ->
-      ok;
+      [];
     unregistered ->
-      ok;
+      [];
     {Type, Opts, Aliases} ->
       change_status_in_opts({Statname, Type, Opts, Aliases}, ToStatus)
   end.
 
 change_status_in_opts(StatInfo, NewStatus) ->
   NewOpts = {status, NewStatus},
-  set_options(StatInfo, NewOpts).
+  set_options(StatInfo, NewOpts),
+  {Statname, _T, _O, _A} = StatInfo,
+  {Statname, NewStatus}.
 
 
 %%%%%%%%%% SET OPTIONS %%%%%%%%%%%%%
@@ -291,6 +296,13 @@ reset_resets() ->
 %%% Profile API
 %%%===================================================================
 
+-spec(get_profiles() -> metadata_value()).
+%% @doc
+%% returns a list of the profile names stored in the metadata
+%% @end
+get_profiles() ->
+  riak_core_metadata:to_list(?PROFPFX).
+
 -spec(get_current_stats() -> stats()).
 %% @doc
 %% retrieving the stats out of the metadata isn't as easy as just giving
@@ -324,7 +336,6 @@ register_profile(ProfileName, Stats) ->
   end.
 
 
-
 -spec(load_profile(profilename()) -> ok | error()).
 %% @doc
 %% Find the profile in the metadata and pull out stats to change them
@@ -332,10 +343,14 @@ register_profile(ProfileName, Stats) ->
 %% change the ones that need changing to prevent errors
 %% @end
 load_profile(ProfileName) ->
-  CurrentStats = get_current_stats(),
-  ProfileStats = get_profile_stats(ProfileName),
-  ToChange = compare_stats(CurrentStats, ProfileStats),
-  change_stat_status(ToChange).
+  case get_profile_stats(ProfileName) of
+    {error, Reason} ->
+      {error, Reason};
+    ProfileStats ->
+      CurrentStats = get_current_stats(),
+      ToChange = compare_stats(CurrentStats, ProfileStats),
+      change_stat_status(ToChange)
+  end.
 
 get_profile_stats(ProfileName) ->
   case check_meta(?PROFILEKEY(ProfileName)) of
@@ -370,7 +385,7 @@ change_stat_status(Stats) ->
         end,
       [{Stat, {status, NewSt}} | Acc]
                 end, [], Stats),
-  riak_stat_coordinator:coordinate(change_status, ToChange).
+  riak_stat_coordinator:change_status(ToChange).
 
 
 -spec(delete_profile(profilename()) -> ok).
@@ -381,13 +396,10 @@ change_stat_status(Stats) ->
 %% profile is "unregistered" so it can not be reloaded again after deletion
 %% @end
 delete_profile(ProfileName) ->
-  delete_p(ProfileName).
-
-delete_p(Profile) ->
-  delete({?PROFID, ?PROF}, Profile).
+  delete(?PROFPFX, ProfileName).
 
 
--spec(reset_profile() -> ok).
+-spec(reset_profile() -> stats() | error()).
 %% @doc
 %% resets the profile by enabling all the stats, pulling out all the stats that
 %% are disabled in the metadata and then changing them to enabled in both the

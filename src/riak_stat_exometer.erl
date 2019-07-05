@@ -11,9 +11,13 @@
 -export([
   register_stat/4, alias/1, aliases/2, re_register/2,
   read_stats/1, get_datapoint/2, get_value/1, get_values/1, select_stat/1, info/2,
-  update_or_create/3, update_or_create/4, change_status/1, set_opts/2,
-  unregister_stats/4, unregister_stat/1, reset_stat/1
+  update_or_create/3, update_or_create/4,
+  change_status/1, set_opts/2,
+  unregister_stat/1, reset_stat/1
 ]).
+
+%% caching API
+-export([read_cache/2, write_to_cache/4, delete_cache/2]).
 
 %% Secondary API
 -export([timestamp/0]).
@@ -33,6 +37,7 @@
 -type acc()       :: any().
 -type pattern()   :: ets:match_spec().
 -type timestamp() :: non_neg_integer().
+-type ttl()       :: atom() | integer().
 -type info() :: name | type | module | value | cache
 | status | timestamp | options | ref | datapoints | entry.
 
@@ -111,7 +116,7 @@ alias_fun() ->
 %% @end
 read_stats(App) ->
   Values = get_values([?PFX, App]),
-  [print_stats(Name, [status]) || {Name, _V} <- Values].
+  [Name  || {Name, _V} <- Values].
 
 -spec(get_datapoint(statname(), datapoint()) -> exo_value() | error()).
 %% @doc
@@ -192,11 +197,6 @@ set_opts(StatName, Opts) ->
 
 %%%%%%%%%%%%% UNREGISTER / RESET %%%%%%%%%%%%%%
 
-unregister_stats([Op, time], Idx, Type, App) ->
-  unregister_stat([?PFX, App, Type, Op, time, Idx]);
-unregister_stats(Mod, Idx, Type, App) ->
-  unregister_stat([?PFX, App, Type, Mod, Idx]).
-
 -spec(unregister_stat(statname()) -> ok | error()).
 %% @doc
 %% deletes the stat entry from exometer
@@ -210,6 +210,20 @@ unregister_stat(StatName) ->
 %% @end
 reset_stat(StatName) ->
   exometer:reset(StatName).
+
+%%%%%%%%%%%%% CACHING %%%%%%%%%%%%%%
+
+-spec(read_cache(statname(), datapoint()) -> not_found | {ok, value()}).
+read_cache(Name, DP) ->
+  exometer_cache:read(Name, DP).
+
+-spec(write_to_cache(statname(), datapoint(), value(), ttl()) -> ok).
+write_to_cache(Name, DP, Value, TTL) ->
+  exometer_cache:write(Name, DP, Value, TTL).
+
+-spec(delete_cache(statname(), datapoint()) -> ok).
+delete_cache(Name, DP) ->
+  exometer_cache:delete(Name, DP), ok.
 
 %%%%%%%%%%%% Helper Functions %%%%%%%%%%%
 
@@ -231,7 +245,3 @@ start() ->
 stop() ->
   exometer:stop().
 
-%% ADMIN
-
-print_stats(Stat, Attr) ->
-  riak_stat_info:print(Stat, Attr).

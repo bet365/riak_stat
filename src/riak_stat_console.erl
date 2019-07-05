@@ -1,13 +1,10 @@
 %%%-------------------------------------------------------------------
-%%% @author savannahallsop
-%%% @copyright (C) 2019, <COMPANY>
 %%% @doc
 %%%
 %%% @end
 %%% Created : 25. Jun 2019 14:40
 %%%-------------------------------------------------------------------
 -module(riak_stat_console).
--author("savannahallsop").
 
 -behaviour(gen_server).
 
@@ -25,12 +22,6 @@
 %% Cache API
 -export([]).
 
-
-
-
-
-
--export([coordinate/2]).
 %% API
 -export([start_link/0]).
 
@@ -45,7 +36,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-  priority = metadata
+  priority
 }).
 
 %%%===================================================================
@@ -60,9 +51,8 @@
 %% otherwise use: riak-admin stat show-enabled | show-disabled
 %% @end
 show_stat(Arg, Status) ->
-
-  Reply = gen_server:call(?SERVER, {show, Arg, Status}),
-  print_stats(Reply, []).
+  {Reply, Attr} = gen_server:call(?SERVER, {show, Arg, Status}),
+  print_stats(Reply, Attr).
 
 -spec(show_stat_0(Arg :: term()) -> term()).
 %% @doc
@@ -78,7 +68,7 @@ show_stat_0(Arg) ->
 %% @end
 stat_info(Arg) ->
   {Attrs, RestArg} = gen_server:call(?SERVER, {info_stat, Arg}),
-  [print_stats(E, Attrs) || E <- find_entries(RestArg, '_')].
+  [print_stats(E, Attrs) || {{E, _S, _S}, _DP} <- find_entries(RestArg, '_')].
 
 -spec(disable_stat_0(Arg :: term()) -> term()).
 %% @doc
@@ -93,9 +83,9 @@ disable_stat_0(Arg) ->
 %% change the status of the stat in metadata and in exometer
 %% @end
 status_change(Arg, ToStatus) ->
-  % todo: get the list of stats and the status pulled out of the metadata
-  OldStatus = gen_server:call(?SERVER, {change_status, Arg, ToStatus}),
-  responder(Arg, OldStatus, fun change_status/2, ToStatus).
+  CleanStats = clean_stats(Arg, ToStatus),
+  ToChange = gen_server:call(?SERVER, {change_status, CleanStats, ToStatus}),
+  responder(ToChange, fun change_status/2, ToStatus).
 
 -spec(reset_stat(Arg :: term()) -> term()).
 %% @doc
@@ -103,68 +93,34 @@ status_change(Arg, ToStatus) ->
 %% has been reset
 %% @end
 reset_stat(Arg) ->
-%%  gen_server:call(?SERVER, {reset, Arg}).
-  responder(Arg, enabled, fun reset_stats/2, []).
+  Stats = [Stat || {Stat, _Info} <- clean_stats(Arg, '_')],
+  responder(Stats, fun reset_stats/2, enabled).
 
 %%%===================================================================
 %%% Admin API
 %%%===================================================================
 
+clean_stats(Arg, Status) ->
+  riak_stat_admin:parse_information(Arg, Status).
+
 print_stats(Entries, Attributes) ->
   riak_stat_admin:print(Entries, Attributes).
 
+find_entries(Stats, Status) ->
+  riak_stat_data:find_entries(Stats, Status).
 
 %%%===================================================================
 %%% Coordinator API
 %%%===================================================================
 
 change_status(Name, ToStatus) ->
-  riak_stat_coordinator:coordinate(change_status, [{Name, {status, ToStatus}}]).
-%%  case change_meta_status(Name, ToStatus) of
-%%    ok ->
-%%      change_exom_status(Name, ToStatus);
-%%    {error, Reason} ->
-%%      Reason;
-%%    _ ->
-%%      change_exom_status(Name, ToStatus)
-%%  end.
+  riak_stat_coordinator:change_status([{Name, {status, ToStatus}}]).
 
-
-reset_stats(Name, []) ->
+reset_stats(Name, _status) ->
   reset_stats(Name).
 reset_stats(Name) ->
-  riak_stat_coordinator:reset_stats(Name).
-%%case reset_meta_stat(Name) of
-%%ok ->
-%%reset_exom_stat(Name);
-%%_ ->
-%%io:fwrite("Could not reset stat ~p~n", [Name])
-%%end.
+  riak_stat_coordinator:reset_stat(Name).
 
-
-%%%===================================================================
-%%% Cache API
-%%%===================================================================
-
--spec(coordinate(Fun :: term(), Arg :: term()) ->
-  ok | {error, Reason :: term()} | term()).
-%% @doc
-%% coordinates the function calls from riak_core_console
-%% the function is checked in riak_stat_data if it is a function that
-%% actually exists, if not then {error, no_function_found} is returned
-%% @end
-coordinate(Fun, Arg) ->
-  Fun1 = sanitise_func(Fun),
-  Arg1 = sanitise_data(Arg),
-  Response = gen_server:call(?SERVER, {Fun1, Arg1}),
-  print(Response).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @end
 %%--------------------------------------------------------------------
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
@@ -176,28 +132,13 @@ start_link() ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
-%% @end
-%%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
-  {ok, #state{}}.
+  P = riak_stat_admin:priority(),
+  {ok, #state{priority = P}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @end
 %%--------------------------------------------------------------------
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
@@ -207,27 +148,23 @@ init([]) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
-handle_call({stat_show, Arg}, _From, State = #state{priority = Priority}) ->
-  %% todo: check in cache first
-  Reply = check_in(Priority, Arg),
+
+handle_call({show, Arg, Status}, _From, State) ->
+  Reply = find_entries(Arg, Status),
   {reply, {Reply, []}, State};
 handle_call({info_stat, Arg}, _From, State) ->
   {reply, pick_info_attrs(split_arg(Arg)), State};
-handle_call({change_status, _Arg, ToStatus}, _From, State) ->
-  OldStatus = case ToStatus of
-                enabled -> disabled;
-                disabled -> enabled;
-                _ -> '_'
-              end,
-
-  {reply, OldStatus, State};
+handle_call({change_status, CleanStats, _ToStatus}, _From, State) ->
+  ToChange =
+  lists:map(fun({Stat, _Info}) -> Stat end, CleanStats),
+    {reply, ToChange, State};
 handle_call({show_stat_0, Arg}, _From, State) ->
   io:fwrite("Arg: ~p~n", [Arg]),
-  not_updating(Arg),
-  {reply, ok, State};
+  Reply = not_updating(Arg),
+  {reply, Reply, State};
 handle_call({disable_stat_0, Arg}, _From, State) ->
-  {NotUpdating, _Updating} = not_updating(Arg),
-  [status_change(Name, disabled) || {Name, _Val} <- NotUpdating],
+  NotUpdating = not_updating(Arg),
+  [status_change(Name, disabled) || {{Name, _Val}, _L} <- NotUpdating],
   {reply, ok, State};
 
 handle_call({Request, _Arg}, _From, State) ->
@@ -236,12 +173,6 @@ handle_call(Request, _From, State) ->
   {reply, {error, Request}, State}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @end
-%%--------------------------------------------------------------------
 -spec(handle_cast(Request :: term(), State :: #state{}) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
@@ -249,15 +180,7 @@ handle_call(Request, _From, State) ->
 handle_cast(_Request, State) ->
   {noreply, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
-%% @end
+
 %%--------------------------------------------------------------------
 -spec(handle_info(Info :: timeout() | term(), State :: #state{}) ->
   {noreply, NewState :: #state{}} |
@@ -267,28 +190,11 @@ handle_info(_Info, State) ->
   {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%%
-%% @spec terminate(Reason, State) -> void()
-%% @end
-%%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
 terminate(_Reason, _State) ->
   ok.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
-%% @end
 %%--------------------------------------------------------------------
 -spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
     Extra :: term()) ->
@@ -305,52 +211,29 @@ print(Response) ->
     riak_stat_info:print(R, A)
             end, Response).
 
-sanitise_func(Fun) ->
-  riak_stat_data:sanitise_func(Fun).
-
-sanitise_data(Arg) ->
-  riak_stat_data:sanitise_data(Arg).
-
-%%%
-%%check_in(metadata, {Stat, Status}) ->
-%%  find_meta_info(Stat, Status);
-%%check_in(exometer, {Stat, Status}) ->
-%%  find_exom_info(Stat, Status);
-check_in(metadata, Arg) ->
-  find_meta_stat_status(Arg);
-check_in(exometer, Arg) ->
-  find_exom_stat_status(Arg).
-
-find_meta_stat_status(Arg) ->
-  % todo: metadata is the default
-  riak_stat_coordinator:metadata(show_stat, Arg, [status]).
-
-find_exom_stat_status(Arg) ->
-  riak_stat_coordinator:exometer(show_stat, Arg, [status]).
-
-
 not_updating(Arg) ->
-  {{Entries, _, _S}, _DPs} = find_entries(Arg, enabled),
-  riak_stat_assist_mgr:print_stats0(Entries).
+  Stats = find_entries(Arg, enabled),
+  Entries =
+  lists:foldl(fun({{E, _S, _F}, _DP}, Acc) ->
+                  case riak_stat_coordinator:get_info(E, value) of
+                    [] ->
+                      [{{E, 0}, []} | Acc];
+                    _ -> Acc
+                  end
+              end, [], Stats),
+  riak_stat_admin:print(Entries).
 
-find_entries(Arg, Status) ->
-  riak_stat_admin:find_entries(Arg, Status).
 
 % Extra in the case of change status is the new status
 % in the case of reset status it is - the incremental value ot reset it by
-responder(Arg, CuStatus, Fun, Extra) ->
+responder(Tochange, Fun, Status) ->
   lists:foreach(
-    fun({[{LP, []}], _}) ->
+    fun([]) ->
       io:fwrite(
-        "== ~s (Legacy pattern): No matching stats ==~n", [LP]);
-      ({[{LP, Matches}], _}) ->
-        io:fwrite("== ~s (Legacy pattern): ==~n", [LP]),
-        [io:fwrite("~p: ~p~n", [N, Fun(N, Extra)])
-          || {N, _} <- Matches];
-      ({Entries, _}) ->
-        [io:fwrite("~p: ~p~n", [N, Fun(N, Extra)])
-          || {N, _, _} <- Entries]
-    end, find_entries(Arg, CuStatus)).
+        "No matching stats~n");
+      (N) ->
+        io:fwrite("~p~n", [Fun(N, Status)])
+    end, Tochange).
 
 split_arg([Str]) ->
   re:split(Str, "\\s", [{return, list}]).

@@ -10,7 +10,11 @@
 -behaviour(gen_server).
 
 %% API
--export([get_stats/0]).
+-export([
+  get_stats/0,
+  priority/0,
+  read_stats/1,
+  set_priority/1]).
 
 %% Data API
 -export([
@@ -22,14 +26,9 @@
 -export([print/2]).
 
 %% coordinator API
--export([]).
-
-%% ____________________--
-
--export([register/3,
+-export([
+  register/3,
   unregister/5]).
-
--export([coordinate/1, coordinate/2]).
 
 %% API
 -export([start_link/0]).
@@ -43,8 +42,11 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(PFX, riak_stat:prefix()).
 
--record(state, {statstable}).
+-record(state, {
+  statstable,
+  priority = metadata}).
 
 %%%===================================================================
 %%% API
@@ -52,6 +54,15 @@
 
 get_stats() ->
   gen_server:call(?SERVER, get_stats).
+
+priority() ->
+  gen_server:call(?SERVER, priority).
+
+read_stats(App) ->
+  parse_information([?PFX, App], '_').
+
+set_priority(Priority) ->
+  gen_server:call(?SERVER, {priority, Priority}).
 
 %%%===================================================================
 %%% Data API
@@ -70,10 +81,12 @@ get_stats() ->
 %% find any and all stats that follow the first [riak,riak_kv_node]
 %% path with anything after it as well.
 parse_information(Data, Status) ->
-  {{APat0, _EPat}, _Stuff} = riak_stat_data:parse_info(Data, Status),
-  APat = [{A, '_'} || A <- APat0],
+    AList = riak_stat_data:parse_info(Data, Status),
+  [parse_pattern(APat0) || {{APat0, _EPat}, _Stuff} <- AList].
+
+parse_pattern(Pat) ->
+  APat = [{A, '_'} || A <- Pat],
   gen_server:call(?SERVER, {pattern, APat}).
-%%  print(Stats, []).
 
 -spec(find_entries(Arg :: term(), Status :: term()) -> term()).
 %% @doc
@@ -122,50 +135,11 @@ print(Entries, Attr) ->
 %%% Coordinator API
 %%%===================================================================
 
-%% Functions that go to Either metadata or exometer go through the
-%% coordinator
-
 register(P, App, Stat) ->
   gen_server:call(?SERVER, {register, P, App, Stat}).
 
 unregister(Pfx, App, Mod, Idx, Type) ->
   gen_server:call(?SERVER, {unregister, {Pfx, App, Mod, Idx, Type}}).
-
-
-%%-spec(unreg_meta_stat(StatName :: term()) -> term() | ok | {error, Reason :: term()}).
-%%%% @doc
-%%%% Marks the meta data of a stat as unregistered, deleting the stat from the
-%%%% metadata will mean upon node restarting it will re_register. This option
-%%%% prevents this from happening and keeps a record of the stats history
-%%%% @end
-%%unreg_meta_stat(Statname) ->
-%%  riak_stat_coordinator:coordinate(unregister, Statname).
-%%
-%%-spec(unreg_exom_stat(StatName :: term()) -> term() | ok | {error, Reason :: term()}).
-%%%% @doc
-%%%% unregister the stat form exometer, after the stat is marked as unregistered in
-%%%% metadata
-%%%% @end
-%%unreg_exom_stat(Statname) ->
-%%  riak_stat_exometer:unregister_stat(Statname).
-
-
-coordinate({Fun, Arg}) ->
-  coordinate(Fun, Arg).
-coordinate(Fun, Arg) ->
-  riak_stat_coordinator:coordinate(Fun, Arg).
-%%  case Fun of
-%%    register ->
-%%      register(Arg);
-%%    update ->
-%%      update(Arg);
-%%    read ->
-%%      read(Arg)
-%%  end.
-
-%%no_function_found(_Info) ->
-%%  {error, no_function_found}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -240,6 +214,18 @@ handle_call({pattern, Pattern}, _From, State = #state{statstable = Ets}) ->
       [ets:match_object(Ets, Pat) | Acc]
                 end, [], Pattern),
   {reply, Stats, State};
+handle_call(priority, _From, State = #state{priority = Priority}) ->
+  {reply, Priority, State};
+handle_call({priority, Priority}, _From, State = #state{priority = _Whatev}) ->
+  NewP =
+    case Priority of
+      metadata -> metadata;
+      meta -> metadata;
+      exometer -> exometer;
+      exom -> exometer;
+      _ -> metadata
+    end,
+  {reply, ok, State#state{priority = NewP}};
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
@@ -308,8 +294,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-%%
-
 
 register_stat(P, App, Stat, Tab) ->
   {Name, Type, Opts, Aliases} =
@@ -321,8 +305,7 @@ register_stat(P, App, Stat, Tab) ->
   StatName = stat_name(P, App, Name),
   ets:insert(Tab, StatName),
   % Pull out the status of the stat from MetaData
-  coordinate(register, {StatName, Type, Opts, Aliases}).
-%%  coordinate(register, {StatName, Type, NewOpts, Aliases}).
+  riak_stat_coordinator:register({StatName, Type, Opts, Aliases}).
 
 % Put the prefix and App name in front of every stat name.
 stat_name(P, App, N) when is_atom(N) ->
@@ -340,18 +323,4 @@ unreg_stats(P, App, Type, Mod, Index) ->
   unreg_from_both([P, App, Type, Mod, Index]).
 
 unreg_from_both(StatName) ->
-  coordinate(unregister, StatName).
-
-%%  case unreg_meta_stat(StatName) of
-%%    ok ->
-%%      unreg_exom_stat(StatName);
-%%    unregistered ->
-%%      unreg_exom_stat(StatName);
-%%    _ ->
-%%      lager:debug("riak_stat_mngr:unreg_both -- could not unregister from meta~n"),
-%%      ok
-%%  end.
-
-
-
-
+  riak_stat_coordinator:unregister(StatName).

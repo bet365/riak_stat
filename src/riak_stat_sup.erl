@@ -41,8 +41,6 @@ init([]) ->
         {admin,
             {riak_stat_admin, start_link, []},
             Restart, Shutdown, Type, [riak_stat_admin]},
-    %% TODO: read the metadata and pull out profiles and their stats
-        %% send them into the Profile Server to be initiated
 
     ProfileChild =
         {profiles,

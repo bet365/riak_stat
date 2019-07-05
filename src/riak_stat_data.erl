@@ -15,18 +15,24 @@
 %% API
 -export([find_entries/2]).
 
+-type data()    :: list() | binary() | atom().
+-type statlist():: list().
+-type status()  :: atom().
+-type reason()  :: any().
+-type error()   :: {error, reason()}.
+
 -define(PFX, riak_stat:prefix()).
 
--spec(parse_info(Data :: term(), Status :: term()) -> term()).
+-spec(parse_info(data(), status()) -> statlist()).
 %% @doc
 %% The data goes into parse_info and returns as a tuple of the
-%% {Statname, {Type, Status, DPs}}
+%% {Statname, Exometer:selectPattern, {Type, Status, DPs}}
 %%
 %% the statname is the Key that is stored in the metadata and
 %% in exometer, most data gets passed through here for the the
 %% kv-stores to stay linear.
 
-%% status is only necessary for find_entries
+%% status is useful for find_entries
 %% @end
 parse_info([], _Status) ->
   no_data;
@@ -41,7 +47,7 @@ parse_info_(Data, Status) when is_list(Data) ->
   io:format("R: ~p, Est: ~p~n", [R, Est]),
   Ether = est(Est, '_', Status, default),
 %%  {Stats, ExSelectPattern, {Type, Status, Dps}} =
-  {parse_stat_entry(R, Ether), Ether}.
+  [{Stats, ExPat, Ether} || {Stats, ExPat} <- parse_stat_entry(R, Ether)].
 
 %% {Stat, {Type, Status, DPS}}
 
@@ -82,7 +88,8 @@ parse_stat_entry([], {Type, Status}) ->
   {no_stat,
     {{[?PFX] ++ '_', Type, '_'}, [{'=:=', '$status', Status}], ['$_']}
   };
-%% if the stat is an empty list it will make the exometer:select pattern
+%% if the stat is an empty list it will make the exometer:select pattern to find
+%% everything?
 parse_stat_entry("*", {Type, Status}) ->
   parse_stat_entry([], {Type, Status});
 parse_stat_entry("[" ++ _ = Expr, {_Type, _Status}) ->
@@ -125,7 +132,6 @@ partial_eval({op, _, '++', L1, L2}) ->
   partial_eval(L1) ++ partial_eval(L2);
 partial_eval(X) ->
   erl_parse:normalise(X).
-
 
 replace_parts(Parts) ->
   case split("**", Parts) of
@@ -194,38 +200,23 @@ pads() ->
     ['_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_', '_']].
 
 
--spec(find_entries(Arg :: term()| list(), ToStatus :: atom()) ->
-  ok | term() | {error, Reason :: term()}).
+-spec(find_entries(data(), status()) ->  statlist() | error()).
 %% @doc
 %% pulls the information of a stat out of exometer
 %% @end
 find_entries(Arg, ToStatus) ->
-  {APat, EPat, {Type, Status, DPs}} = parse_info(Arg, ToStatus),
-  lists:foldl(fun(A, Acc) ->
-    case legacy_search(A, Type, Status) of
-      false ->
-        [{find_entries_1(EPat), DPs} | Acc];
-      Found ->
-        [{Found, DPs} | Acc]
-    end
-              end, [], APat).
+  StatsList = parse_info(Arg, ToStatus),
+  lists:foldl(fun({Stat, EPat, {Type, Status, DPs}}, Acc) ->
+                  case legacy_search(Stat, Type, Status) of
+                    false ->
+                      [{find_entries_1(EPat), DPs} | Acc];
+                    Found ->
+                      [{Found, DPs} | Acc]
+                  end
+              end, [], StatsList).
 
-%%      case S of
-%%        "[" ++ _ ->
-%%          {find_entries_1(S, Type, Status), DPs};
-%%        _ ->
-%%          case legacy_search(S, Type, Status) of
-%%            false ->
-%%              {find_entries_1(S, Type, Status), DPs};
-%%            Found ->
-%%              {Found, DPs}
-%%          end
-%%      end
-%%  .
-%%
-%%
 find_entries_1(Pattern) ->
-  riak_stat_coordinator:coordinate(select, Pattern).
+  riak_stat_coordinator:select(Pattern).
 
 legacy_search(S, Type, Status) ->
   case re:run(S, "\\.", []) of
