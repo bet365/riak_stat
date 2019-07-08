@@ -211,6 +211,9 @@ unregister_stat(StatName) ->
 reset_stat(StatName) ->
   exometer:reset(StatName).
 
+
+
+
 %%%%%%%%%%%%% CACHING %%%%%%%%%%%%%%
 
 -spec(read_cache(statname(), datapoint()) -> not_found | {ok, value()}).

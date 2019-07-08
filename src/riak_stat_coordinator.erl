@@ -17,8 +17,8 @@
   get_info/2, get_datapoint/2,
   select/1,
   alias/1, aliases/1,
-  get_stat_info/1, get_app_stats/1, get_stat_status/1
-
+  get_stat_info/1, get_app_stats/1, get_stat_status/1,
+  update/3
 ]).
 
 %% Metadata API
@@ -164,6 +164,9 @@ reset_exom_stat(Arg) ->
 
 get_stats(Arg) ->
   riak_stat_exometer:read_stats(Arg).
+
+update(Name, IncrBy, Type) ->
+  riak_stat_exometer:update_or_create(Name, IncrBy, Type).
 
 %%%%%%%%% Caching %%%%%%%%%%%
 

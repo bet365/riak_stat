@@ -28,7 +28,8 @@
 %% coordinator API
 -export([
   register/3,
-  unregister/5]).
+  unregister/5,
+  update/3]).
 
 %% API
 -export([start_link/0]).
@@ -141,11 +142,10 @@ register(P, App, Stat) ->
 unregister(Pfx, App, Mod, Idx, Type) ->
   gen_server:call(?SERVER, {unregister, {Pfx, App, Mod, Idx, Type}}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @end
+update(Name, Inc, Type) ->
+  riak_stat_coordinator:update(Name, Inc, Type).
+
+
 %%--------------------------------------------------------------------
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).

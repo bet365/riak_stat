@@ -148,8 +148,8 @@ get_app_stats(App) ->
   riak_stat_admin:read_stats(App).
 
 -spec(update(stat(), non_neg_integer(), type()) -> ok | arg()).
-update(Name, IncrBy, Type) -> % point to admin
-  riak_stat_exometer:update_or_create(Name, IncrBy, Type).
+update(Name, IncrBy, Type) ->
+  riak_stat_admin:update(Name, IncrBy, Type).
 
 
 -spec(unregister(arg()) -> ok | print()).
