@@ -136,26 +136,36 @@ unregister_stats_test_() ->
     ]).
 
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%% ACTUAL TESTS %%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 test_re_register() ->
-  ok.
+%%  "register a stat that already exists",
+  ?_assertEqual(ok, riak_stat:register(riak_core,
+    [{ignored_gossip_total, counter, [], [{value, ignored_gossip_total0}]}])).
 
 test_count_register() ->
-  ok.
+%%  "register a test stat for counter",
+  ?_assert(ok == riak_stat:register(riak_stat,
+    [{test_stat_name, counter, [{status, disabled}], [{one, test_stat_count_one},
+      {count, test_stat_count_count}]}])).
 
 test_gauge_register() ->
-  ok.
+%%  "register a test stat for gauge"
+  ?_assert(ok == riak_stat:register(riak_stat,
+    [{test_stat_name_2, gauge, [], [{value, test_stat_gauge}]}])).
 
 test_histogram_register() ->
-  ok.
+%%  "register a test stat for histogram",
+  ?_assert(ok == riak_stat:register(riak_stat,
+    [{test_stat_name_3, histogram, [], [{value, test_stat_histo},
+      {max, test_stat_histo_max}, {min, test_stat_histo_min}]}])).
 
 
 test_update_stat() ->
-  ok.
+%%  "update a stat"
+  ?_assert().
 
 test_update_non_stat() ->
   ok.
@@ -173,7 +183,7 @@ test_unregister_non_stat() ->
   ok.
 
 test_unregister_multi_stat() ->
-  ok.z
+  ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%% HELPER FUNCTIONS %%%%%%%%%%%%%%

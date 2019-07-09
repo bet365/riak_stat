@@ -5,22 +5,20 @@
 %%% Created : 25. Jun 2019 14:40
 %%%-------------------------------------------------------------------
 -module(riak_stat_console).
+-author("Savannah Allsop").
+
+-include("riak_stat.hrl").
 
 -behaviour(gen_server).
 
 %% API
 -export([
-  show_stat/2, show_stat_0/1, stat_info/1,
-  disable_stat_0/1, status_change/2, reset_stat/1]).
-
-%% Admin API
--export([]).
-
-%% Coordinator API
--export([]).
-
-%% Cache API
--export([]).
+  show_stat/2,
+  show_stat_0/1,
+  stat_info/1,
+  disable_stat_0/1,
+  status_change/2,
+  reset_stat/1]).
 
 %% API
 -export([start_link/0]).
@@ -43,7 +41,7 @@
 %%% API
 %%%===================================================================
 
--spec(show_stat(Arg :: term(), Status :: atom()) -> term()).
+-spec(show_stat(data(), status()) -> value()).
 %% @doc
 %% Show enabled or disabled stats
 %% when using riak-admin stat show riak.** enabled stats will show by default
@@ -54,7 +52,7 @@ show_stat(Arg, Status) ->
   {Reply, Attr} = gen_server:call(?SERVER, {show, Arg, Status}),
   print_stats(Reply, Attr).
 
--spec(show_stat_0(Arg :: term()) -> term()).
+-spec(show_stat_0(data()) -> value()).
 %% @doc
 %% Check which stats in exometer are not updating, only checks enabled
 %% @end
@@ -62,7 +60,7 @@ show_stat_0(Arg) ->
   NotUpdating = gen_server:call(?SERVER, {show_stat_0, Arg}),
   print(NotUpdating).
 
--spec(stat_info(Arg :: term()) -> term()).
+-spec(stat_info(data()) -> value()).
 %% @doc
 %% Returns all the stats information
 %% @end
@@ -70,7 +68,7 @@ stat_info(Arg) ->
   {Attrs, RestArg} = gen_server:call(?SERVER, {info_stat, Arg}),
   [print_stats(E, Attrs) || {{E, _S, _S}, _DP} <- find_entries(RestArg, '_')].
 
--spec(disable_stat_0(Arg :: term()) -> term()).
+-spec(disable_stat_0(data()) -> value()).
 %% @doc
 %% Similar to the function above, but will disable all the stats that
 %% are not updating
@@ -78,7 +76,7 @@ stat_info(Arg) ->
 disable_stat_0(Arg) ->
   gen_server:call(?SERVER, {disable_stat_0, Arg}).
 
--spec(status_change(Arg :: term(), ToStatus :: atom()) -> term()).
+-spec(status_change(data(), status()) -> value()).
 %% @doc
 %% change the status of the stat in metadata and in exometer
 %% @end
@@ -87,7 +85,7 @@ status_change(Arg, ToStatus) ->
   ToChange = gen_server:call(?SERVER, {change_status, CleanStats, ToStatus}),
   responder(ToChange, fun change_status/2, ToStatus).
 
--spec(reset_stat(Arg :: term()) -> term()).
+-spec(reset_stat(data()) -> value()).
 %% @doc
 %% resets the stats in metadata and exometer and tells metadata that the stat
 %% has been reset
@@ -239,19 +237,4 @@ split_arg([Str]) ->
   re:split(Str, "\\s", [{return, list}]).
 
 pick_info_attrs(Arg) ->
-  case lists:foldr(
-    fun("-name", {As, Ps}) -> {[name | As], Ps};
-      ("-type", {As, Ps}) -> {[type | As], Ps};
-      ("-module", {As, Ps}) -> {[module | As], Ps};
-      ("-value", {As, Ps}) -> {[value | As], Ps};
-      ("-cache", {As, Ps}) -> {[cache | As], Ps};
-      ("-status", {As, Ps}) -> {[status | As], Ps};
-      ("-timestamp", {As, Ps}) -> {[timestamp | As], Ps};
-      ("-options", {As, Ps}) -> {[options | As], Ps};
-      (P, {As, Ps}) -> {As, [P | Ps]}
-    end, {[], []}, Arg) of
-    {[], Rest} ->
-      {[name, type, module, value, cache, status, timestamp, options], Rest};
-    Other ->
-      Other
-  end.
+  riak_stat_info:pick_info_attrs(Arg).

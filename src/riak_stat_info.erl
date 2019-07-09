@@ -1,25 +1,30 @@
 %%%-------------------------------------------------------------------
-%%% @author savannahallsop
-%%% @copyright (C) 2019, <COMPANY>
 %%% @doc
-%%%
+%%% I/O functions for printing data, or for pulling our additional
+%%% information needed for specific modules
 %%% @end
 %%% Created : 25. Jun 2019 14:42
 %%%-------------------------------------------------------------------
 -module(riak_stat_info).
--author("savannahallsop").
+-author("Savannah Allsop").
+
+-include("riak_stat.hrl").
 
 %% API
--export([print/1, print/2]).
+-export([
+  print/1,
+  print/2,
+  pick_info_attrs/1]).
 
-%%find_entries(Arg, Status) ->
-%%  riak_stat_data:find_entries(Arg, Status).
-
+-spec(print(data()) -> print()).
+%% @doc print argument with all its info @end
 print(Arg) ->
   Arg1 = re:split(Arg, "\\s", [{return, list}]),
   {Attr, RestArg} = pick_info_attrs(Arg1),
   print(RestArg, Attr).
 
+-spec(pick_info_attrs(data()) -> value()).
+%% @doc get list of attrs to print @end
 pick_info_attrs(Arg) ->
   case lists:foldr(
     fun("-name", {As, Ps}) -> {[name | As], Ps};
@@ -38,7 +43,7 @@ pick_info_attrs(Arg) ->
       Other
   end.
 
--spec(print(Entries :: term(), Attributes :: list() | term()) -> term() | ok).
+-spec(print(data(), attr() | term()) -> print()).
 %% @doc
 %% Print stats is generic, and used by both stat show and stat info,
 %% Stat info includes all the attributes that will be printed whereas stat show
@@ -82,7 +87,7 @@ get_value(E, _Status, DPs) ->
   end.
 
 get_datapoint(Name, DP) ->
-  riak_stat_coordinator:coordinate(get_datapoint,{Name, DP}).
+  riak_stat_coordinator:get_datapoint(Name, DP).
 
 % used to print the entire stat information
 print_info_1(N, [A | Attrs]) ->
@@ -102,53 +107,9 @@ print_info_1(N, [A | Attrs]) ->
 
 
 get_info(Name, Info) ->
-  case riak_stat_coordinator:coordinate(get_info,{Name, Info}) of
+  case riak_stat_coordinator:get_info(Name, Info) of
     undefined ->
       [];
     Other ->
       Other
   end.
-
-
-%%print_stats0(Stats) ->
-%%  lists:foldl(
-%%    fun(Stat, Acc) ->
-%%      case prin_stat0(Stat) of
-%%        {_H, disabled, _} ->
-%%          Acc;
-%%        {H, Status, _} ->
-%%          [{H, Status} | Acc]
-%%%%        {_H, _S, []} ->
-%%%%          Acc;
-%%%%        {_H, _S, _V} ->
-%%%%          Acc
-%%      end
-%%%%      [prin_stat0(Stat) | Acc]
-%%    end, [], Stats
-%%  ).
-
-%%prin_stat0(Stat) ->
-%%  H = lists:flatten(io_lib:fwrite("~p: ", [Stat])),
-%%%%  Pad = lists:duplicate(length(H), $\s),
-%%  Info = get_info(core, Stat),
-%%  Status = io:fwrite("~w = ~p~n", [status, proplists:get_value(status, Info, enabled)]),
-%%  Value = io:fwrite("~w = ~p~n", [value, proplists:get_value(value, Info)]),
-%%%%  io:put_chars([H, Status, Value]).
-%%  {H, Status, Value}.
-%%
-%%just_print(Stats) ->
-%%  io:fwrite("Stats ~p~n~n", [length(Stats)]),
-%%  lists:foreach(fun({Stat, _Val}) ->
-%%    print(find_entries(Stat, enabled), [value])
-%%                end, Stats).
-%%just_print(Stat, Status) ->
-%%  io:fwrite("~p: ~p~n", [Stat, Status]).
-
-
-%% print_stats is in this module, anything that needs io:fwrite or a response
-%% to a user will function call into this module,
-
-%% holds responses to the client as well
-
-%% TODO: print_stats
-

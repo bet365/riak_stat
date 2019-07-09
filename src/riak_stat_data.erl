@@ -1,11 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% @doc
-%%%
+%%% Parsing data for profiles and console commands to the format used
+%%% in the metadata and exometer
 %%% @end
 %%% Created : 25. Jun 2019 14:50
 %%%-------------------------------------------------------------------
 -module(riak_stat_data).
--author("savannahallsop").
+-author("Savannah Allsop").
+
+-include("riak_stat.hrl").
 
 %% Sanitising API
 -export([parse_info/2]).
@@ -13,11 +16,6 @@
 %% API
 -export([find_entries/2]).
 
--type data()    :: list() | binary() | atom().
--type statlist():: list().
--type status()  :: atom().
--type reason()  :: any().
--type error()   :: {error, reason()}.
 
 -define(PFX, riak_stat:prefix()).
 
@@ -178,7 +176,6 @@ replace_part(H) ->
     _ -> list_to_atom(H)
   end.
 
-
 pads() ->
   [['_'],
     ['_', '_'],
@@ -301,5 +298,3 @@ split_pattern(B, Acc) ->
     nomatch ->
       lists:reverse([B | Acc])
   end.
-
-

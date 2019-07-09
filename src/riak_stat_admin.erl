@@ -1,17 +1,22 @@
 %%%-------------------------------------------------------------------
 %%% @doc
-%%%
+%%% Functions from _stat modules or from to register, update, read
+%%% or unregister a stat.
 %%% @end
 %%% Created : 27. Jun 2019 15:08
 %%%-------------------------------------------------------------------
 -module(riak_stat_admin).
--author("savannahallsop").
+-author("Savannah Allsop").
+
+-include("riak_stat.hrl").
 
 -behaviour(gen_server).
 
 %% API
 -export([
   get_stats/0,
+  get_stats_status/1,
+  get_stats_info/1,
   priority/0,
   read_stats/1,
   set_priority/1]).
@@ -53,15 +58,48 @@
 %%% API
 %%%===================================================================
 
+-spec(get_stats() -> stats()).
+%% @doc get all the stats from riak_admin ets table @end
 get_stats() ->
   gen_server:call(?SERVER, get_stats).
 
+-spec(priority() -> priority()).
+%% @doc return the priority thats save in the riak_admin state @end
 priority() ->
   gen_server:call(?SERVER, priority).
 
+-spec(read_stats(app()) -> stats()).
+%% @doc similar to get_stats but specific to the app @end
 read_stats(App) ->
   parse_information([?PFX, App], '_').
 
+-spec(get_stats_status(app()) -> stats()).
+%% @doc find the status of the apps stats from priority() @end
+get_stats_status(App) ->
+  Stats = parse_information([?PFX, App], '_'),
+  lists:foldl(fun(Stat, Acc) ->
+            case riak_stat_coordinator:check_status(Stat) of
+              {error, _R} ->
+                Acc;
+              Stat ->
+                [Stat | Acc]
+            end
+              end, [], Stats).
+
+-spec(get_stats_info(app()) -> stats()).
+%% @doc get the info for the apps stats from exometer @end
+get_stats_info(App) ->
+  Stats = parse_information([?PFX, App], '_'),
+  {Attr, _RestArg} = riak_stat_info:pick_info_attrs(Stats),
+  lists:foldl(fun(Stat, Acc) ->
+    [{Stat, lists:map(fun(At) ->
+      {At, riak_stat_coordinator:get_info(Stat, At)}
+                      end, Attr)} | Acc]
+              end, [], Stats).
+
+-spec(set_priority(value()) -> ok).
+%% @doc set priority exom | exometer | meta | metadata, anything other
+%% than these options defaults the priority to metadata @end
 set_priority(Priority) ->
   gen_server:call(?SERVER, {priority, Priority}).
 
@@ -126,9 +164,9 @@ the_alpha_map(A_B) ->
 %%% Info API
 %%%===================================================================
 
+-spec(print(data(), attr()) -> value()).
 print(Arg) ->
-  riak_stat_info:print(Arg).
-
+  print(Arg, []).
 print(Entries, Attr) ->
   riak_stat_info:print(Entries, Attr).
 
@@ -136,15 +174,26 @@ print(Entries, Attr) ->
 %%% Coordinator API
 %%%===================================================================
 
+-spec(register(pfx(), app(), statname()) -> ok | error()).
+%% @doc register apps stats into both meta and exometer @end
 register(P, App, Stat) ->
   gen_server:call(?SERVER, {register, P, App, Stat}).
 
+-spec(unregister(pfx(), app(), Mod :: data(), Idx :: data(), type()) ->
+  ok | error()).
+%% @doc unregister a stat from the metadata leaves it's status as
+%% {status, unregistered}, and deletes the metric from exometer @end
 unregister(Pfx, App, Mod, Idx, Type) ->
   gen_server:call(?SERVER, {unregister, {Pfx, App, Mod, Idx, Type}}).
 
+-spec(update(statname(), incrvalue(), type()) -> ok | error()).
+%% @doc update a stat in exometer, if the stat doesn't exist it will
+%% re_register it. When the stat is deleted in exometer the status is
+%% changed to unregistered in metadata, it will check the metadata
+%% first, if unregistered then ok is returned by default and no stat
+%% is created. @end
 update(Name, Inc, Type) ->
   riak_stat_coordinator:update(Name, Inc, Type).
-
 
 %%--------------------------------------------------------------------
 -spec(start_link() ->
@@ -156,16 +205,6 @@ start_link() ->
 %%% gen_server callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
-%% @end
 %%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
@@ -181,12 +220,6 @@ init([]) ->
   %% No heir, so on startup this ets:table is created
   {ok, #state{statstable = StatsTable}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @end
 %%--------------------------------------------------------------------
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
@@ -230,12 +263,6 @@ handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @end
-%%--------------------------------------------------------------------
 -spec(handle_cast(Request :: term(), State :: #state{}) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
@@ -245,15 +272,6 @@ handle_cast(_Request, State) ->
   {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
 -spec(handle_info(Info :: timeout() | term(), State :: #state{}) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
@@ -262,28 +280,11 @@ handle_info(_Info, State) ->
   {noreply, State}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%%
-%% @spec terminate(Reason, State) -> void()
-%% @end
-%%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
 terminate(_Reason, _State) ->
   ok.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
-%% @end
 %%--------------------------------------------------------------------
 -spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
     Extra :: term()) ->
@@ -315,7 +316,6 @@ stat_name(P, App, N) when is_list(N) ->
 
 stat_name_([P, [] | Rest]) -> [P | Rest];
 stat_name_(N) -> N.
-
 
 unreg_stats(P, App, Type, [Op, time], Index) ->
   unreg_from_both([P, App, Type, Op, time, Index]);

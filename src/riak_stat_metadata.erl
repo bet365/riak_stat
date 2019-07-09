@@ -10,6 +10,7 @@
 -author("savannahallsop").
 
 -include("riak_core_metadata.hrl").
+-include("riak_stat.hrl").
 
 %% Basic API
 -export([
@@ -40,18 +41,6 @@
   delete_profile/1,
   reset_profile/0
 ]).
-
--type reason()        :: unregistered | no_stat | no_status | any().
--type error()         :: {error, reason() | profileerror()}.
--type status()        :: enabled | disabled | unregistered.
--type opt_tuple()     :: {atom(), any()}.
--type options()       :: list() | opt_tuple().
--type type()          :: atom() | list().
--type aliases()       :: list() | atom() | tuple().
--type profilename()   :: atom().
--type profileerror()  :: no_stats | profile_exists_already.
--type stats()         :: list().
--type acc()           :: any().
 
 -define(PFX, riak_stat:prefix()).
 -define(STAT, stats).
@@ -218,7 +207,8 @@ register_stat(StatName, Type, Opts, Aliases) ->
     [] -> % if not registered return default Opts
       re_register_stat(StatName, Type, [{vclock, vclock:fresh(?NODEID, 1)} | Opts], Aliases),
       Opts;
-    unregistered -> {error, unregistered};
+    unregistered -> [];
+%%      {error, unregistered};
     {_Type, MetaOpts, _Aliases} -> % if registered
       [find_status(MetaOpts) | Opts];
     _ ->

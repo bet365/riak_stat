@@ -1,46 +1,43 @@
 %%%-------------------------------------------------------------------
 %%% @doc
-%%%
+%%% Exometer Man, the Manager for all things exometer, any function calls
+%%% to exometer go through here.
 %%% @end
 %%% Created : 25. Jun 2019 14:40
 %%%-------------------------------------------------------------------
 -module(riak_stat_exometer).
--author("savannahallsop").
+-author("Savannah Allsop").
 
 %% API
 -export([
-  register_stat/4, alias/1, aliases/2, re_register/2,
-  read_stats/1, get_datapoint/2, get_value/1, get_values/1, select_stat/1, info/2,
-  update_or_create/3, update_or_create/4,
-  change_status/1, set_opts/2,
-  unregister_stat/1, reset_stat/1
-]).
+  register_stat/4,
+  alias/1,
+  aliases/2,
+  re_register/2,
+  read_stats/1,
+  get_datapoint/2,
+  get_value/1,
+  get_values/1,
+  select_stat/1,
+  info/2,
+  update_or_create/3,
+  update_or_create/4,
+  change_status/1,
+  set_opts/2,
+  unregister_stat/1,
+  reset_stat/1]).
 
 %% caching API
--export([read_cache/2, write_to_cache/4, delete_cache/2]).
+-export([
+  read_cache/2,
+  write_to_cache/4,
+  delete_cache/2]).
 
 %% Secondary API
 -export([timestamp/0]).
 
 %% additional API
 -export([start/0, stop/0]).
-
--type statname()  :: atom() | list().
--type type()      :: atom() | tuple().
--type options()   :: list().
--type aliases()   :: list() | atom() | tuple().
--type datapoint() :: list() | atom() | tuple().
--type value()     :: any().
--type exo_value() :: {ok, value()}.
--type reason()    :: no_template | exists | not_found | any().
--type error()     :: {error, reason()}.
--type acc()       :: any().
--type pattern()   :: ets:match_spec().
--type timestamp() :: non_neg_integer().
--type ttl()       :: atom() | integer().
--type info() :: name | type | module | value | cache
-| status | timestamp | options | ref | datapoints | entry.
-
 
 -define(PFX, riak_stat:prefix()).
 
@@ -211,10 +208,7 @@ unregister_stat(StatName) ->
 reset_stat(StatName) ->
   exometer:reset(StatName).
 
-
-
-
-%%%%%%%%%%%%% CACHING %%%%%%%%%%%%%%
+%%%%%%%%%%%%% CACHING %%%%%%%%%%%%%% <- unused
 
 -spec(read_cache(statname(), datapoint()) -> not_found | {ok, value()}).
 read_cache(Name, DP) ->
