@@ -164,7 +164,6 @@ handle_call({disable_stat_0, Arg}, _From, State) ->
   NotUpdating = not_updating(Arg),
   [status_change(Name, disabled) || {{Name, _Val}, _L} <- NotUpdating],
   {reply, ok, State};
-
 handle_call({Request, _Arg}, _From, State) ->
   {reply, {error, Request}, State};
 handle_call(Request, _From, State) ->

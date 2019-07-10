@@ -1,15 +1,16 @@
 {application, riak_stat,
  [
   {description, "Stat Management for Riak"},
-  {vsn, "1.0.0"},
+  {vsn, "1.0.1"},
   {registered, []},
   {applications, [
                   kernel,
                   stdlib,
                   lager,
                   exometer_core,
-                  riak_core     % metadata
-                 ]},
+                  riak_core,     % metadata
+                  exoskeleton
+  ]},
   {mod, { riak_stat_app, []}},
   {env, [
     {exometer_defaults,

@@ -62,7 +62,7 @@ re_register(StatName, Type) ->
   re_register(StatName, Type, []).
 
 re_register(StatName, Type, Opts) ->
-  exometer:re_register(StatName, Type, Opts).
+  exo_stats:create_statistic(StatName, Type, Opts).
 
 
 -spec(alias(Group :: term()) -> ok | acc()).
@@ -88,21 +88,23 @@ alias(Group) ->
         end
       end, [], orddict:to_list(Group))).
 
--spec(aliases(Type :: atom(), Entry :: list()) -> ok | acc() | error()).
+-spec(aliases(type(), list()) -> ok | acc() | error()).
 %% @doc
 %% goes to exometer_alias and performs the type of alias function specified
 %% @end
-aliases(new, [Alias, StatName, DP]) ->
-  exometer_alias:new(Alias, StatName, DP);
-aliases(prefix_foldl, []) ->
-  exometer_alias:prefix_foldl(<<>>, alias_fun(), orddict:new());
-aliases(regexp_foldr, [N]) ->
-  exometer_alias:regexp_foldr(N, alias_fun(), orddict:new()).
+aliases(Type, Entry) ->
+  exo_stats:aliases(Type, Entry).
+%%aliases(new, [Alias, StatName, DP]) ->
+%%  exometer_alias:new(Alias, StatName, DP);
+%%aliases(prefix_foldl, []) ->
+%%  exometer_alias:prefix_foldl(<<>>, alias_fun(), orddict:new());
+%%aliases(regexp_foldr, [N]) ->
+%%  exometer_alias:regexp_foldr(N, alias_fun(), orddict:new()).
 
-alias_fun() ->
-  fun(Alias, Entry, DP, Acc) ->
-    orddict:append(Entry, {DP, Alias}, Acc)
-  end.
+%%alias_fun() ->
+%%  fun(Alias, Entry, DP, Acc) ->
+%%    orddict:append(Entry, {DP, Alias}, Acc)
+%%  end.
 
 %%%%%%%%%%%%%% READING %%%%%%%%%%%%%%
 
@@ -120,7 +122,8 @@ read_stats(App) ->
 %% Retrieves the datapoint value from exometer
 %% @end
 get_datapoint(Name, Datapoint) ->
-  exometer:get_value(Name, Datapoint).
+%%  exometer:get_value(Name, Datapoint).
+  exo_stats:get_value(Name, Datapoint).
 
 -spec(get_value(statname()) -> exo_value() | error()).
 %% @doc
@@ -128,30 +131,30 @@ get_datapoint(Name, Datapoint) ->
 %% 'default' is inputted, however it is used by some modules
 %% @end
 get_value(S) ->
-  exometer:get_value(S).
+  exo_stats:get_value(S).
 
--spec(get_values(Path :: any()) -> exo_value() | error()).
+-spec(get_values(any()) -> exo_value() | error()).
 %% @doc
 %% The Path is the start or full name of the stat(s) you wish to find,
 %% i.e. [riak,riak_kv] as a path will return stats with those to elements
 %% in their path. and uses exometer:find_entries and above function
 %% @end
 get_values(Path) ->
-  exometer:get_values(Path).
+  exo_stats:get_values(Path).
 
--spec(select_stat(pattern()) -> list()).
+-spec(select_stat(pattern()) -> value()).
 %% @doc
 %% Find the stat in exometer using this pattern
 %% @end
 select_stat(Pattern) ->
-  exometer:select(Pattern).
+  exo_stats:select(Pattern).
 
 -spec(info(statname(), info()) -> value()).
 %% @doc
 %% find information about a stat on a specific item
 %% @end
 info(Name, Type) ->
-  exometer:info(Name, Type).
+  exo_stats:info(Name, Type).
 
 %%%%%%%%%%%%%% UPDATING %%%%%%%%%%%%%%
 
@@ -166,7 +169,7 @@ update_or_create(Name, UpdateVal, Type) ->
 -spec(update_or_create(Name :: list() | atom(), UpdateVal :: any(), Type :: atom() | term(), Opts :: list()) ->
   ok | term()).
 update_or_create(Name, UpdateVal, Type, Opts) ->
-  exometer:update_or_create(Name, UpdateVal, Type, Opts).
+  exo_stats:update_or_create(Name, UpdateVal, Type, Opts).
 
 -spec(change_status(Stats :: list() | term()) ->
   ok | term()).
@@ -190,7 +193,7 @@ change_status(Stat, Status) ->
 %% disabled in it's options in exometer will change its status in the entry
 %% @end
 set_opts(StatName, Opts) ->
-  exometer:setopts(StatName, Opts).
+  exo_stats:setopts(StatName, Opts).
 
 %%%%%%%%%%%%% UNREGISTER / RESET %%%%%%%%%%%%%%
 
@@ -199,14 +202,18 @@ set_opts(StatName, Opts) ->
 %% deletes the stat entry from exometer
 %% @end
 unregister_stat(StatName) ->
-  exometer:delete(StatName).
+  exo_stats:unregister(StatName).
 
 -spec(reset_stat(statname()) -> ok | error()).
 %% @doc
 %% resets the stat in exometer
 %% @end
 reset_stat(StatName) ->
-  exometer:reset(StatName).
+  exo_stats:reset(StatName).
+
+
+
+
 
 %%%%%%%%%%%%% CACHING %%%%%%%%%%%%%% <- unused
 
@@ -224,7 +231,7 @@ delete_cache(Name, DP) ->
 
 %%%%%%%%%%%% Helper Functions %%%%%%%%%%%
 
--spec(timestamp() -> timestamp()).
+-spec(timestamp() -> timestamp()). %% TODO: move to exo_stat
 %% @doc
 %% Returns the timestamp to put in the stat entry
 %% @end
