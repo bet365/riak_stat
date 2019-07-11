@@ -3,10 +3,8 @@
 %%% Exometer Man, the Manager for all things exometer, any function calls
 %%% to exometer go through here.
 %%% @end
-%%% Created : 25. Jun 2019 14:40
 %%%-------------------------------------------------------------------
 -module(riak_stat_exometer).
--author("Savannah Allsop").
 
 %% API
 -export([
@@ -20,6 +18,7 @@
   get_values/1,
   select_stat/1,
   info/2,
+  aggregate/2,
   update_or_create/3,
   update_or_create/4,
   change_status/1,
@@ -62,7 +61,7 @@ re_register(StatName, Type) ->
   re_register(StatName, Type, []).
 
 re_register(StatName, Type, Opts) ->
-  exo_stats:create_statistic(StatName, Type, Opts).
+  exometer:re_register(StatName, Type, Opts).
 
 
 -spec(alias(Group :: term()) -> ok | acc()).
@@ -92,19 +91,20 @@ alias(Group) ->
 %% @doc
 %% goes to exometer_alias and performs the type of alias function specified
 %% @end
-aliases(Type, Entry) ->
-  exo_stats:aliases(Type, Entry).
-%%aliases(new, [Alias, StatName, DP]) ->
-%%  exometer_alias:new(Alias, StatName, DP);
-%%aliases(prefix_foldl, []) ->
-%%  exometer_alias:prefix_foldl(<<>>, alias_fun(), orddict:new());
-%%aliases(regexp_foldr, [N]) ->
-%%  exometer_alias:regexp_foldr(N, alias_fun(), orddict:new()).
+aliases(new, [Alias, StatName, DP]) ->
+  exometer_alias:new(Alias, StatName, DP);
+aliases(prefix_foldl, []) ->
+  exometer_alias:prefix_foldl(<<>>, alias_fun(), orddict:new());
+aliases(regexp_foldr, [N]) ->
+  exometer_alias:regexp_foldr(N, alias_fun(), orddict:new()).
 
-%%alias_fun() ->
-%%  fun(Alias, Entry, DP, Acc) ->
-%%    orddict:append(Entry, {DP, Alias}, Acc)
-%%  end.
+alias_fun() ->
+  fun(Alias, Entry, DP, Acc) ->
+    orddict:append(Entry, {DP, Alias}, Acc)
+  end.
+
+aggregate(A, S) ->
+  exometer:aggregate(A, S).
 
 %%%%%%%%%%%%%% READING %%%%%%%%%%%%%%
 
@@ -123,7 +123,7 @@ read_stats(App) ->
 %% @end
 get_datapoint(Name, Datapoint) ->
 %%  exometer:get_value(Name, Datapoint).
-  exo_stats:get_value(Name, Datapoint).
+  exometer:get_value(Name, Datapoint).
 
 -spec(get_value(statname()) -> exo_value() | error()).
 %% @doc
@@ -131,7 +131,7 @@ get_datapoint(Name, Datapoint) ->
 %% 'default' is inputted, however it is used by some modules
 %% @end
 get_value(S) ->
-  exo_stats:get_value(S).
+  exometer:get_value(S).
 
 -spec(get_values(any()) -> exo_value() | error()).
 %% @doc
@@ -140,21 +140,21 @@ get_value(S) ->
 %% in their path. and uses exometer:find_entries and above function
 %% @end
 get_values(Path) ->
-  exo_stats:get_values(Path).
+  exometer:get_values(Path).
 
 -spec(select_stat(pattern()) -> value()).
 %% @doc
 %% Find the stat in exometer using this pattern
 %% @end
 select_stat(Pattern) ->
-  exo_stats:select(Pattern).
+  exometer:select(Pattern).
 
 -spec(info(statname(), info()) -> value()).
 %% @doc
 %% find information about a stat on a specific item
 %% @end
 info(Name, Type) ->
-  exo_stats:info(Name, Type).
+  exometer:info(Name, Type).
 
 %%%%%%%%%%%%%% UPDATING %%%%%%%%%%%%%%
 
@@ -169,7 +169,7 @@ update_or_create(Name, UpdateVal, Type) ->
 -spec(update_or_create(Name :: list() | atom(), UpdateVal :: any(), Type :: atom() | term(), Opts :: list()) ->
   ok | term()).
 update_or_create(Name, UpdateVal, Type, Opts) ->
-  exo_stats:update_or_create(Name, UpdateVal, Type, Opts).
+  exometer:update_or_create(Name, UpdateVal, Type, Opts).
 
 -spec(change_status(Stats :: list() | term()) ->
   ok | term()).
@@ -193,7 +193,7 @@ change_status(Stat, Status) ->
 %% disabled in it's options in exometer will change its status in the entry
 %% @end
 set_opts(StatName, Opts) ->
-  exo_stats:setopts(StatName, Opts).
+  exometer:setopts(StatName, Opts).
 
 %%%%%%%%%%%%% UNREGISTER / RESET %%%%%%%%%%%%%%
 
@@ -202,14 +202,14 @@ set_opts(StatName, Opts) ->
 %% deletes the stat entry from exometer
 %% @end
 unregister_stat(StatName) ->
-  exo_stats:unregister(StatName).
+  exometer:delete(StatName).
 
 -spec(reset_stat(statname()) -> ok | error()).
 %% @doc
 %% resets the stat in exometer
 %% @end
 reset_stat(StatName) ->
-  exo_stats:reset(StatName).
+  exometer:reset(StatName).
 
 
 

@@ -3,10 +3,8 @@
 %%% I/O functions for printing data, or for pulling our additional
 %%% information needed for specific modules
 %%% @end
-%%% Created : 25. Jun 2019 14:42
 %%%-------------------------------------------------------------------
 -module(riak_stat_info).
--author("Savannah Allsop").
 
 -include("riak_stat.hrl").
 

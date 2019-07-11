@@ -3,10 +3,8 @@
 %%% Parsing data for profiles and console commands to the format used
 %%% in the metadata and exometer
 %%% @end
-%%% Created : 25. Jun 2019 14:50
 %%%-------------------------------------------------------------------
 -module(riak_stat_data).
--author("Savannah Allsop").
 
 -include("riak_stat.hrl").
 

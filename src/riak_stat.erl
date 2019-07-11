@@ -26,6 +26,8 @@
   get_app_stats/1,
   get_stats_status/1,
   get_stats_info/1,
+  get_value/1,
+  aggregate/2,
   update/3,
   unregister/4,
   unregister/1]).
@@ -131,6 +133,14 @@ get_stats_status(App) ->
 %% @end
 get_stats_info(App) ->
   riak_stat_admin:get_stats_info(App).
+
+%% TODO -spec / :: () -> .
+get_value(Arg) ->
+  riak_stat_admin:get_stat_value(Arg).
+
+%% TODO: --spec / :: () -> .
+aggregate(App, Stats) ->
+  riak_stat_admin:aggregate(App, Stats).
 
 -spec(update(stat(), non_neg_integer(), type()) -> ok | arg()).
 update(Name, IncrBy, Type) ->

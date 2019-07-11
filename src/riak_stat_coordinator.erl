@@ -4,10 +4,8 @@
 %%% any information needed from exometer or metadata goes through the
 %%% coordinator
 %%% @end
-%%% Created : 25. Jun 2019 14:41
 %%%-------------------------------------------------------------------
 -module(riak_stat_coordinator).
--author("Savannah Allsop").
 
 -include("riak_stat.hrl").
 
@@ -22,6 +20,7 @@
   select/1,
   alias/1, aliases/1,
   get_stat_info/1, get_app_stats/1,
+  aggregate/2,
   update/3, check_status/1
 ]).
 
@@ -105,6 +104,8 @@ alias(Arg) ->
 aliases({Arg, Value}) ->
   riak_stat_exometer:aliases(Arg, Value).
 
+aggregate(A, S) ->
+  riak_stat_exometer:aggregate(A, S).
 
 %%%%%%%%%%%%%%% Console API %%%%%%%%%%%%%%%%%%%
 

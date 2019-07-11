@@ -2,10 +2,8 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 25. Jun 2019 14:40
 %%%-------------------------------------------------------------------
 -module(riak_stat_console).
--author("Savannah Allsop").
 
 -include("riak_stat.hrl").
 

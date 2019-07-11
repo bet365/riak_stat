@@ -19,6 +19,8 @@
   get_stats_info/1,
   priority/0,
   read_stats/1,
+  get_stat_value/1,
+  aggregate/2,
   set_priority/1]).
 
 %% Data API
@@ -67,6 +69,14 @@ get_stats() ->
 %% @doc return the priority thats save in the riak_admin state @end
 priority() ->
   gen_server:call(?SERVER, priority).
+
+%TODO -spec / :: () -> .
+get_stat_value(Arg) ->
+  riak_stat_coordinator:get_stat_info(Arg).
+
+% TODO: -spec / :: () -> .
+aggregate(A, S) ->
+  riak_stat_coordinator:aggregate(A, S).
 
 -spec(read_stats(app()) -> stats()).
 %% @doc similar to get_stats but specific to the app @end

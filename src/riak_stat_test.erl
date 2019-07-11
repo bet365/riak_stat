@@ -2,7 +2,6 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 05. Jul 2019 09:52
 %%%-------------------------------------------------------------------
 -module(riak_stat_test).
 -include_lib("eunit/include/eunit.hrl").

@@ -4,10 +4,8 @@
 %%% riak_core_metadata. All information that needs to go into or out
 %%% of the metadata will always go through this module.
 %%% @end
-%%% Created : 25. Jun 2019 14:40
 %%%-------------------------------------------------------------------
 -module(riak_stat_metadata).
--author("savannahallsop").
 
 -include("riak_core_metadata.hrl").
 -include("riak_stat.hrl").
