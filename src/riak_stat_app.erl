@@ -10,7 +10,8 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    riak_stat_sup:start_link().
+    riak_stat_sup:start_link(),
+    exoskele_sup:start_link().
 
 stop(_State) ->
     ok.

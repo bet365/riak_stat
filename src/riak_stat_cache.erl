@@ -6,6 +6,10 @@
 %%%-------------------------------------------------------------------
 -module(riak_stat_cache).
 
+%% set env for caching
+%% make riak_stat_console got through this first for gets
+
+
 %% API
 -export([check_cache/2, write_cache/3, delete_cache/2]).
 

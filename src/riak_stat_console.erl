@@ -1,6 +1,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
-%%%
+%%% RPC calls from riak_core_console are directed to this module to
+%%% enable/disable or read stats from exometer/metadata,
+%%% calls from exoskeleskin point to this module to retrieve stats
+%%% for a UDP or HTTP endpoint
 %%% @end
 %%%-------------------------------------------------------------------
 -module(riak_stat_console).
