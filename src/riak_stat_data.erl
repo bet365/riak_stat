@@ -1,7 +1,15 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Parsing data for profiles and console commands to the format used
-%%% in the metadata and exometer
+%%% in the metadata and exometer.
+%%%
+%%% Console and profile commands input:
+%%% [<<"riak.riak_kv.**">>] and [<<"test-profile-name">>]
+%%%
+%%% Additional Exoskeleskin input data:
+%%% [<<"type=udp/port=8765">>]
+%%%
+%%% Parse the Data into an atom or list format.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(riak_stat_data).
@@ -41,9 +49,12 @@ parse_info_(Data, Status) when is_list(Data) ->
   io:format("R: ~p, Est: ~p~n", [R, Est]),
   Ether = est(Est, '_', Status, default),
 %%  {Stats, ExSelectPattern, {Type, Status, Dps}} =
-  [{Stats, ExPat, Ether} || {Stats, ExPat} <- parse_stat_entry(R, Ether)].
+  [{Stats, ExPat, Ether} || {Stats, ExPat} <- parse_stat_entry(R, Ether)];
+parse_info_(Data, _Status) when is_atom(Data)  ->
+  [Data];
+parse_info_(Data, Status) ->
+  io:format("Data: ~p incorrect format, Status~p~n", [Data, Status]).
 
-%% {Stat, {Type, Status, DPS}}
 
 est([<<"type=", T/binary>> | Rest], _Type, Status, DPs) ->
   NewType = case T of
@@ -250,7 +261,7 @@ match_type(Name, T) ->
   T == get_info(Name, type).
 
 get_info(Name, Info) -> % Todo: rremove this
-  case riak_stat_mngr:get_info(Name, Info) of
+  case riak_stat_coordinator:get_info(Name, Info) of
     undefined ->
       [];
     Other ->
@@ -258,10 +269,10 @@ get_info(Name, Info) -> % Todo: rremove this
   end.
 
 aliases(Type, Entries) -> % todo: is this necessary??
-  riak_stat_mngr:aliases(Type, Entries).
+  riak_stat_coordinator:aliases({Type, Entries}).
 
 get_datapoint(Name, DP) -> % todo: maybe keep this
-  riak_stat_mngr:get_datapoint(Name, DP).
+  riak_stat_coordinator:get_datapoint(Name, DP).
 
 
 zip_values([{D, V} | T], DPs) ->

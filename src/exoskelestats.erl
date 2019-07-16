@@ -12,7 +12,9 @@
   utc_milliseconds_time/0,
   exo_timestamp/0,
   parse_arg/1,
-  parse_data/1
+  parse_data/1,
+  get_port/1,
+  get_type/1
 ]).
 
 -define(MEGASECS_MILLISECOND_DIVISOR,1000000000).
@@ -89,4 +91,25 @@ parse_data_(Data) when is_binary(Data) ->
 parse_data_(Data) when is_list(Data) ->
   try list_to_integer(Data)
   catch error:_ -> lager:error("Port is not an integer~n")
+  end.
+
+get_port(Port) when is_list(Port) == false andalso is_binary(Port) ->
+  get_port([Port]);
+get_port([<<"port=", P/binary>> | Rest]) ->
+  case P of
+    Po ->
+      try binary_to_integer(Po)
+      catch error: _ -> Rest
+      end;
+    _ ->
+      Rest
+  end.
+
+get_type(Type) when is_list(Type) == false andalso is_binary(Type) ->
+  get_type([Type]);
+get_type([<<"type=", T/binary>> | Rest]) ->
+  case T of
+    <<"udp">> -> udp;
+    <<"http">> -> http;
+    _ -> Rest
   end.

@@ -18,7 +18,7 @@
   change_status/1,
   get_info/2, get_datapoint/2,
   select/1,
-  alias/1, aliases/1,
+  alias/1, aliases/1, aliases/2,
   get_stat_info/1, get_app_stats/1,
   aggregate/2,
   update/3, check_status/1
@@ -101,6 +101,8 @@ select(Arg) ->
 alias(Arg) ->
   riak_stat_exometer:alias(Arg).
 
+aliases(Arg, Value) ->
+  riak_stat_exometer:aliases(Arg, Value).
 aliases({Arg, Value}) ->
   riak_stat_exometer:aliases(Arg, Value).
 
