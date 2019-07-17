@@ -50,8 +50,8 @@ parse_info_(Data, Status) when is_list(Data) ->
   Ether = est(Est, '_', Status, default),
 %%  {Stats, ExSelectPattern, {Type, Status, Dps}} =
   [{Stats, ExPat, Ether} || {Stats, ExPat} <- parse_stat_entry(R, Ether)];
-parse_info_(Data, _Status) when is_atom(Data)  ->
-  [Data];
+%%parse_info_(Data, _Status) when is_atom(Data)  ->
+%%  [Data];
 parse_info_(Data, Status) ->
   io:format("Data: ~p incorrect format, Status~p~n", [Data, Status]).
 
@@ -222,6 +222,8 @@ find_entries(Arg, ToStatus) ->
 find_entries_1(Pattern) ->
   riak_stat_coordinator:select(Pattern).
 
+
+%% Legacy Code
 legacy_search(S, Type, Status) ->
   case re:run(S, "\\.", []) of
     {match, _} ->
@@ -260,7 +262,7 @@ match_type(_, '_') ->
 match_type(Name, T) ->
   T == get_info(Name, type).
 
-get_info(Name, Info) -> % Todo: rremove this
+get_info(Name, Info) ->
   case riak_stat_coordinator:get_info(Name, Info) of
     undefined ->
       [];

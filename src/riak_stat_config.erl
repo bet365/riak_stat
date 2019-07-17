@@ -31,3 +31,12 @@ get_all_info() ->
 
 get_all() ->
   application:get_all_key(?APP).
+
+
+%% todo
+
+% functions to check if a gen_server is alive,
+% a timer to wait a second before stats can register
+
+% If skeleskin is enabled definition
+% if so then set_env, it can be pulled out at the app and then the exoskeleskin will rise

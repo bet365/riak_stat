@@ -143,7 +143,7 @@ parse_pattern(Pat) ->
 %% @end
 find_entries(Arg, Status) ->
   Stats = riak_stat_data:find_entries(Arg, Status),
-  [print(Stat, print(Attr)) || {Stat, Attr} <- Stats].
+  [print(Stat, Attr) || {Stat, Attr} <- Stats].
 
 
 -spec(the_alpha_stat(Alpha :: list(), Beta :: list()) -> term()).
@@ -163,11 +163,11 @@ the_alpha_stat(Alpha, Beta) ->
 % The stats must fight, to become the alpha
 
 the_alpha_map(A_B) ->
-  lists:map(fun
-              ({Stat, {Atom, Val}}) -> {Stat, {Atom, Val}};
-              ({Stat, Val})         -> {Stat, {atom, Val}};
-              ([]) -> []
-            end, A_B).
+    lists:map(fun
+                ({Stat, {Atom, Val}}) -> {Stat, {Atom, Val}};
+                ({Stat, Val})         -> {Stat, {atom, Val}};
+                ([]) -> []
+              end, A_B).
 
 
 %%%===================================================================
@@ -176,9 +176,11 @@ the_alpha_map(A_B) ->
 
 -spec(print(data(), attr()) -> value()).
 print(Arg) ->
-  print(Arg, []).
+    print(Arg, []).
+print(Entries, Attr) when is_list(Entries) ->
+  lists:map(fun(E) -> print(E, Attr) end, Entries);
 print(Entries, Attr) ->
-  riak_stat_info:print(Entries, Attr).
+    riak_stat_info:print(Entries, Attr).
 
 %%%===================================================================
 %%% Coordinator API

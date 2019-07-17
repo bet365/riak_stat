@@ -337,7 +337,8 @@ load_profile(ProfileName) ->
     ProfileStats ->
       CurrentStats = get_current_stats(),
       ToChange = compare_stats(CurrentStats, ProfileStats),
-      change_stat_status(ToChange)
+      change_stat_status(ToChange),
+
   end.
 
 get_profile_stats(ProfileName) ->
