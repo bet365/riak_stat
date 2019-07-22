@@ -23,7 +23,9 @@
 %%%
 %%% pull_profiles() ->
 %%%     Pulls the list of all the profiles saved in the metadata and
-%%%     their stats.
+%%%     their stats
+%%%
+%%% when pretty printing profile names -> [<<"profile-one">>] use ~s token.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(riak_stat_profiles).
@@ -37,6 +39,7 @@
     load_profile/1,
     delete_profile/1,
     reset_profile/0,
+    persist_profile_data/1,
     pull_profiles/0
 ]).
 
@@ -53,16 +56,20 @@
 
 -define(SERVER, ?MODULE).
 -define(TIME, vclock:fresh()).
+-define(timestamp, os:timestamp()).
 -define(NODEID, riak_core_nodeid:get()).
 
 -record(state, {
-    profile = none,
-    profilelist
+    profile = none, %% currently loaded profile
+    profilelist     %% tableId
 }).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+%% The data doesn't need to get parsed in profiles, it is only used as a
+%% key, and not as a reference for anything else.
+
 
 -spec(save_profile(profilename()) -> response()).
 %% @doc
@@ -70,6 +77,7 @@
 %% response is 'no_data'.
 %% Saves the profile name in the metadata with all the current stats and
 %% their status as the value
+%% multiple saves of the same name overwrites the profile
 %% @end
 save_profile(ProfileName) ->
     gen_server:call(?SERVER, {save, ProfileName}).
@@ -103,19 +111,16 @@ delete_profile(ProfileName) ->
 %% {error, Reason}
 %% @end
 reset_profile() ->
-    Reply = gen_server:call(?SERVER, reset),
-    print(Reply).
+    gen_server:call(?SERVER, reset).
 
-%%%===================================================================
-%%% Admin API
-%%%===================================================================
-
-print({error, Reason}) ->
-    print(Reason);
-print(Data) when Data == no_data; Data == no_stats; Data == no_profile ->
-    io:fwrite("No data found~n");
-print(Stats) ->
-    riak_stat_admin:print(Stats, []).
+-spec(persist_profile_data(data()) -> ok | error()).
+%% @doc
+%% persists the data of a specific profile, the stats that are enabled in that
+%% profile will be scraped from exometer for their values and stored in the
+%% metadata. default is every 1000 milliseconds
+%% @end
+persist_profile_data(Arg) ->
+    gen_server:call(?SERVER, {persist, Arg}).
 
 %%--------------------------------------------------------------------
 -spec(start_link() ->
@@ -155,28 +160,49 @@ init([]) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_call({_Fun, []}, _From, State) ->
     {reply, {error, no_data}, State};
+handle_call({_Fun, [<<>>]}, _From, State) ->
+    {reply, {error, no_data}, State};
 handle_call({save, Arg}, _From, State = #state{profilelist = ProfileList}) ->
-    ets:insert(ProfileList, {Arg, ?NODEID}),
+    ets:insert(ProfileList, {Arg, ?timestamp}),
     save_profile_(Arg),
     {reply, ok, State};
-handle_call({load, Arg}, _From, State = #state{profilelist = ProfileList}) ->
+handle_call({load, Arg}, _From, State =
+    #state{profile = Profile, profilelist = ProfileList}) ->
+    {Reply, NewState} =
+    case Profile == Arg of
+        true ->
+            {io:format("~s already loaded~n", [Profile]), State};
+        false ->
+            case ets:lookup(ProfileList, Arg) of
+                []              -> {{error, no_profile}, State};
+                {Name, _time} -> {load_profile_(Name), State#state{profile = Name}}
+            end
+    end,
+    {reply, Reply, NewState};
+handle_call({delete, Arg}, _From, State =
+    #state{profile = Profile, profilelist = ProfileList}) ->
+    NewState =
+        case Profile == Arg of
+            true -> State#state{profile = none};
+            false -> State
+        end,
     Reply =
-      case ets:lookup(ProfileList, Arg) of
-        []              -> {error, no_profile};
-        {Name, _NodeId} -> load_profile_(Name)
-      end,
-    {reply, Reply, State};
-handle_call({delete, Arg}, _From, State = #state{profilelist = ProfileList}) ->
-    Reply =
-      case ets:lookup(ProfileList, Arg) of
-        []              -> {error, no_profile};
-        {Name, _NodeId} -> delete_profile_(Name)
-      end,
-    {reply, Reply, State};
+        case ets:lookup(ProfileList, Arg) of
+            []              -> {error, no_profile};
+            {Name, _time} -> delete_profile_(Name)
+        end,
+    {reply, Reply, NewState};
 handle_call(reset, _From, State) ->
     Reply = reset_profile_(),
     NewState = State#state{profile = none},
     {reply, Reply, NewState};
+handle_call({persist, Arg}, _From, State = #state{profilelist = ProfileList}) ->
+    Reply =
+    case ets:lookup(ProfileList, Arg) of
+        [] -> {error, no_profile};
+        {Name, _NodeId} -> persist_profile_(Name)
+    end,
+    {reply, Reply, State};
 handle_call({Request, _Arg}, _From, State) ->
     {reply, {error, Request}, State};
 handle_call(Request, _From, State) ->
@@ -229,6 +255,9 @@ delete_profile_(ProfileName) ->
 
 reset_profile_() ->
     riak_stat_coordinator:reset_profile().
+
+persist_profile_(ProfileName) ->
+    riak_stat_coordinator:persist_profile_data(ProfileName).
 
 pull_profiles() ->
     riak_stat_coordinator:get_profiles().
