@@ -25,7 +25,20 @@
 %%%     Pulls the list of all the profiles saved in the metadata and
 %%%     their stats
 %%%
-%%% when pretty printing profile names -> [<<"profile-one">>] use ~s token.
+%%% when pretty printing profile names -> [<<"profile-one">>] use ~s token
+%%%
+%%% NOTE :
+%%%     When creating a profile, you can make changes and then overwrite
+%%%     the profile with the new stat configuration. However if the profile
+%%%     is saved and then loaded, upon re-write the new profile is different
+%%%     but still enabled as loaded, therefore it can not be loaded again
+%%%     until it is deleted and created again, or the profile is reset
+%%%
+%%% Data persistence =>
+%%%     when data is persisted based on profile the gen_server will send a
+%%%     request to fetch the data from exometer and store it in metadata
+%%%     every 10s, until stop_persisting is called.
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(riak_stat_profiles).
@@ -40,6 +53,7 @@
     delete_profile/1,
     reset_profile/0,
     persist_profile_data/1,
+    cancel_profile_persist/0,
     pull_profiles/0
 ]).
 
@@ -61,7 +75,8 @@
 
 -record(state, {
     profile = none, %% currently loaded profile
-    profilelist     %% tableId
+    profilelist,    %% tableId
+    timerref
 }).
 
 %%%===================================================================
@@ -120,7 +135,15 @@ reset_profile() ->
 %% metadata. default is every 1000 milliseconds
 %% @end
 persist_profile_data(Arg) ->
-    gen_server:call(?SERVER, {persist, Arg}).
+    gen_server:cast(?SERVER, {persist, Arg, persist_repeat}).
+
+-spec(cancel_profile_persist() -> ok | false).
+%% @doc
+%% Cancelling the profile persistence should be done from other modules,
+%% making it easier for the user
+%% @end
+cancel_profile_persist() ->
+    gen_server:cast(?SERVER, {persist, [], persist_stop}).
 
 %%--------------------------------------------------------------------
 -spec(start_link() ->
@@ -145,8 +168,14 @@ init([]) ->
         {write_concurrency, true},
         {read_concurrency, true}
       ]),
+    Loaded = last_loaded_profile(),
+    Profile =
+    case lists:member(Loaded, Profiles) of
+        true -> Loaded;
+        false -> none
+    end,
     ets:insert(Tid, Profiles),
-    {ok, #state{profilelist = Tid}}.
+    {ok, #state{profilelist = Tid, profile = Profile}}.
 
 %%--------------------------------------------------------------------
 
@@ -196,13 +225,7 @@ handle_call(reset, _From, State) ->
     Reply = reset_profile_(),
     NewState = State#state{profile = none},
     {reply, Reply, NewState};
-handle_call({persist, Arg}, _From, State = #state{profilelist = ProfileList}) ->
-    Reply =
-    case ets:lookup(ProfileList, Arg) of
-        [] -> {error, no_profile};
-        {Name, _NodeId} -> persist_profile_(Name)
-    end,
-    {reply, Reply, State};
+
 handle_call({Request, _Arg}, _From, State) ->
     {reply, {error, Request}, State};
 handle_call(Request, _From, State) ->
@@ -213,6 +236,15 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
+handle_cast({persist, Arg, Cont}, State = #state{profilelist = ProfileList}) ->
+    {Reply, NewState} =
+        case ets:lookup(ProfileList, Arg) of
+            [] -> {{error, no_profile}, State};
+            {Name, _NodeId} ->
+                TimerRef = persist_profile_(Name, Cont),
+                {ok, State#state{timerref = TimerRef}}
+        end,
+    {reply, Reply, NewState};
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -222,6 +254,13 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
+handle_info({persist_stop, _Name}, State = #state{timerref = TimerRef}) ->
+    Result = erlang:cancel_timer(TimerRef),
+    lager:info("Cancelled timer :~p~n", [Result]),
+    {noreply, State#state{timerref = []}};
+handle_info({persist_repeat, Name}, State) ->
+    TimerRef = persist_profile_(Name, persist_repeat),
+    {noreply, State#state{timerref = TimerRef}};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -256,8 +295,15 @@ delete_profile_(ProfileName) ->
 reset_profile_() ->
     riak_stat_coordinator:reset_profile().
 
-persist_profile_(ProfileName) ->
-    riak_stat_coordinator:persist_profile_data(ProfileName).
+persist_profile_(ProfileName, Cont) ->
+    riak_stat_coordinator:persist_profile_data(ProfileName),
+    repeat(ProfileName, Cont).
+
+repeat(Arg, Info) ->
+    erlang:send_after(?PROFILE_PERSIST_DELAY, self(), {Info, Arg}).
 
 pull_profiles() ->
     riak_stat_coordinator:get_profiles().
+
+last_loaded_profile() ->
+    riak_stat_coordinator:get_loaded_profile().
