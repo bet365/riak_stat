@@ -38,9 +38,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {
-    priority
-}).
+-record(state, {}).
 
 %%%===================================================================
 %%% API
@@ -54,7 +52,8 @@
 %% otherwise use: riak-admin stat show-enabled | show-disabled
 %% @end
 show_stat(Arg, Status) ->
-    Stats = gen_server:call(?SERVER, {show, Arg, Status}),
+    StatsNames = data_sanitise(Arg),
+    Stats = gen_server:call(?SERVER, {show, StatsNames, Status}),
     print_stats(Stats).
 
 -spec(show_stat_0(data()) -> value()).
@@ -62,70 +61,75 @@ show_stat(Arg, Status) ->
 %% Check which stats in exometer are not updating, only checks enabled
 %% @end
 show_stat_0(Arg) ->
-    NotUpdating = gen_server:call(?SERVER, {show_stat_0, Arg}),
-    print(NotUpdating).
+    StatNames = data_sanitise(Arg),
+    NotUpdating = gen_server:call(?SERVER, {show_stat_0, StatNames}),
+    print_stats(NotUpdating).
 
 -spec(stat_info(data()) -> value()).
 %% @doc
 %% Returns all the stats information
 %% @end
 stat_info(Arg) ->
-    {_Attrs, RestArg} = gen_server:call(?SERVER, {info_stat, Arg}),
-%%    [print_stats(E, Attrs) || {{E, _S, _S}, _DP} <-
-        find_entries(RestArg, '_')
-%%    ]
-.
+    {Attrs, RestArg} = pick_info_attrs(Arg),
+    StatNames = data_sanitise(RestArg),
+    Found = gen_server:call(?SERVER, {stat_info, StatNames, Attrs}),
+    print_stats(Found).
 
--spec(disable_stat_0(data()) -> value()).
+-spec(disable_stat_0(data()) -> ok).
 %% @doc
 %% Similar to the function above, but will disable all the stats that
 %% are not updating
 %% @end
 disable_stat_0(Arg) ->
-    gen_server:call(?SERVER, {disable_stat_0, Arg}).
+    StatNames = data_sanitise(Arg),
+    gen_server:call(?SERVER, {disable_stat_0, StatNames}).
 
--spec(status_change(data(), status()) -> value()).
+-spec(status_change(data(), status()) -> ok).
 %% @doc
-%% change the status of the stat in metadata and in exometer
+%% change the status of the stat (in metadata and) in exometer
 %% @end
 status_change(Arg, ToStatus) ->
-    CleanStats = clean_stats(Arg, ToStatus),
-    ToChange = gen_server:call(?SERVER, {change_status, CleanStats, ToStatus}),
-    responder(ToChange, fun change_status/2, ToStatus).
+    Stats = data_sanitise(Arg),
+    gen_server:call(?SERVER, {change_status, Stats, ToStatus}).
 
--spec(reset_stat(data()) -> value()).
+-spec(reset_stat(data()) -> ok).
 %% @doc
 %% resets the stats in metadata and exometer and tells metadata that the stat
 %% has been reset
 %% @end
 reset_stat(Arg) ->
-    Stats = [Stat || {Stat, _Info} <- clean_stats(Arg, '_')],
-    responder(Stats, fun reset_stats/2, enabled).
+    StatNames = data_sanitise(Arg),
+    gen_server:call(?SERVER, {reset, StatNames}).
 
 %%%===================================================================
 %%% Admin API
 %%%===================================================================
 
-clean_stats(Arg, Status) ->
-    riak_stat_admin:parse_information(Arg, Status).
+data_sanitise(Arg) ->
+    riak_stat_admin:data_sanitise(Arg).
 
 print_stats(Entries) ->
     print_stats(Entries, []).
 print_stats(Entries, Attributes) ->
     riak_stat_admin:print(Entries, Attributes).
 
-find_entries(Stats, Status) ->
-    riak_stat_admin:find_entries(Stats, Status).
 
 %%%===================================================================
 %%% Coordinator API
 %%%===================================================================
 
-change_status(Name, ToStatus) ->
-    riak_stat_coordinator:change_status([{Name, {status, ToStatus}}]).
+find_entries(StatNames, Status) ->
+    riak_stat_coordinator:find_entries(StatNames, Status).
 
-reset_stats(Name, _status) ->
-    reset_stats(Name).
+not_updating(StatNames) ->
+    riak_stat_coordinator:find_static_stats(StatNames).
+
+find_stat_info(Stats, Info) ->
+    riak_stat_coordinator:find_stats_info(Stats, Info).
+
+change_status(Stats) ->
+    riak_stat_coordinator:change_status(Stats).
+
 reset_stats(Name) ->
     riak_stat_coordinator:reset_stat(Name).
 
@@ -144,8 +148,7 @@ start_link() ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
 init([]) ->
-    P = riak_stat_admin:priority(),
-    {ok, #state{priority = P}}.
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
@@ -156,23 +159,33 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-
 handle_call({show, Arg, Status}, _From, State) ->
     Reply = find_entries(Arg, Status),
     {reply, Reply, State};
-handle_call({info_stat, Arg}, _From, State) ->
-    {reply, pick_info_attrs(split_arg(Arg)), State};
-handle_call({change_status, CleanStats, _ToStatus}, _From, State) ->
-    ToChange =
-    lists:map(fun({Stat, _Info}) -> Stat end, CleanStats),
-    {reply, ToChange, State};
 handle_call({show_stat_0, Arg}, _From, State) ->
-    io:fwrite("Arg: ~p~n", [Arg]),
     Reply = not_updating(Arg),
+    {reply, Reply, State};
+handle_call({stat_info, Arg, Attrs}, _From, State) ->
+    Reply = find_stat_info(Arg, Attrs),
     {reply, Reply, State};
 handle_call({disable_stat_0, Arg}, _From, State) ->
     NotUpdating = not_updating(Arg),
-    [status_change(Name, disabled) || {{Name, _Val}, _L} <- NotUpdating],
+    DisableTheseStats =
+    lists:map(fun({Name, _V}) ->
+        {Name, {status, disabled}}
+            end, NotUpdating),
+    change_status(DisableTheseStats),
+    {reply, ok, State};
+handle_call({change_status, CleanStats, ToStatus}, _From, State) ->
+    Entries = % if disabling lots of stats, pull out only enabled ones
+    case ToStatus of
+        enabled -> find_entries(CleanStats, disabled);
+        disabled -> find_entries(CleanStats, enabled)
+    end,
+    change_status([{Stat, {status, Status}} || {Stat, Status} <- Entries]),
+    {reply, ok, State};
+handle_call({reset, Stats}, _From, State) ->
+    reset_stats(find_entries(Stats, enabled)),
     {reply, ok, State};
 handle_call({Request, _Arg}, _From, State) ->
     {reply, {error, Request}, State};
@@ -209,38 +222,28 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%%===================================================================
-%%% Internal functions
+%%% Helper functions
 %%%===================================================================
 
-print(Response) ->
-    lists:map(fun({R, A}) -> print_stats(R, A) end, Response).
-
-not_updating(Arg) ->
-    Stats = find_entries(Arg, enabled),
-    Entries =
-    lists:foldl(fun({{E, _S, _F}, _DP}, Acc) ->
-                    case riak_stat_coordinator:get_info(E, value) of
-                      [] ->
-                        [{{E, 0}, []} | Acc];
-                      _ -> Acc
-                    end
-                end, [], Stats),
-    riak_stat_admin:print(Entries).
-
-
-% Extra in the case of change status is the new status
-% in the case of reset status it is - the incremental value ot reset it by
-responder(Tochange, Fun, Status) ->
-    lists:foreach(
-      fun([]) ->
-        io:fwrite(
-          "No matching stats~n");
-        (N) ->
-          io:fwrite("~p~n", [Fun(N, Status)])
-      end, Tochange).
+-spec(pick_info_attrs(data()) -> value()).
+%% @doc get list of attrs to print @end
+pick_info_attrs(Arg) ->
+    case lists:foldr(
+        fun ("-name", {As, Ps}) -> {[name | As], Ps};
+            ("-type", {As, Ps}) -> {[type | As], Ps};
+            ("-module", {As, Ps}) -> {[module | As], Ps};
+            ("-value", {As, Ps}) -> {[value | As], Ps};
+            ("-cache", {As, Ps}) -> {[cache | As], Ps};
+            ("-status", {As, Ps}) -> {[status | As], Ps};
+            ("-timestamp", {As, Ps}) -> {[timestamp | As], Ps};
+            ("-options", {As, Ps}) -> {[options | As], Ps};
+            (P, {As, Ps}) -> {As, [P | Ps]}
+        end, {[], []}, split_arg(Arg)) of
+        {[], Rest} ->
+            {[name, type, module, value, cache, status, timestamp, options], Rest};
+        Other ->
+            Other
+    end.
 
 split_arg([Str]) ->
     re:split(Str, "\\s", [{return, list}]).
-
-pick_info_attrs(Arg) ->
-    riak_stat_info:pick_info_attrs(Arg).
