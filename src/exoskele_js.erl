@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @doc
-%%%
+%%% Turn the metrics from exometer into json objects
 %%% @end
 %%%-------------------------------------------------------------------
 -module(exoskele_js).
@@ -8,7 +8,9 @@
 %% API
 -export([
     metrics_to_json/2,
-    metrics_to_json/3
+    metrics_to_json/3,
+    metric_to_string/2,
+    format_fields/2
 ]).
 
 %%--------------------------------------------------------------------
@@ -26,7 +28,7 @@ metrics_to_json(Metrics, AdditionalFields, ExcludedDataPoints) ->
         [] ->
             [];
         _ ->
-            DateTime = exoskelestats:format_time(os:timestamp()),
+            DateTime = exoskele_data:format_time(os:timestamp()),
             [${, format_fields(AdditionalFields, []), $,, quote("timestamp"), $:, quote(DateTime), $,, JsonStats, $}, "\n"]
     end.
 
@@ -40,7 +42,7 @@ metrics_to_json(Metrics, ExcludedDataPoints) ->
         [] ->
             [];
         _ ->
-            DateTime = exoskelestats:format_time(os:timestamp()),
+            DateTime = exoskele_data:format_time(os:timestamp()),
             [${, quote("timestamp"), $:, quote(DateTime), $,, JsonStats, $}, "\n"]
     end.
 
@@ -163,3 +165,25 @@ do_quote_value(Value) when is_binary(Value) ->
     quote(binary_to_list(Value));
 do_quote_value(Value) when is_list(Value) ->
     quote(Value).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Metrics to KV String
+%% @end
+%%--------------------------------------------------------------------
+metric_to_string(Metric, DataPoints) ->
+    metric_to_string(Metric, DataPoints, []).
+
+metric_to_string(_Metric, [], Acc) ->
+    Acc;
+metric_to_string(Metric, [{DataPoint, Value}|DataPoints], Acc) ->
+    metric_to_string(Metric, DataPoints, [to_kv(Metric, DataPoint, Value)|Acc]).
+
+to_kv(Metric, DataPoint, Value) ->
+    [metric_to_binary(Metric), $., name(DataPoint), $=, integer_to_binary(Value), $\n].
+
+metric_to_binary([Final]) ->
+    metric_elem_to_binary(Final);
+metric_to_binary([H | T]) ->
+    <<(metric_elem_to_binary(H))/binary, $., (metric_to_binary(T))/binary >>.
