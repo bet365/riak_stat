@@ -9,201 +9,414 @@
 
 -include("riak_stat.hrl").
 
-%% API
+%% Console API
 -export([
-  get_priority/0,
-  register/1,
-  unregister/1,
-  reset_stat/1,
-  change_status/1,
-  get_info/2, get_datapoint/2,
-  select/1,
-  alias/1, aliases/1, aliases/2,
-  get_stat_info/1, get_app_stats/1,
-  aggregate/2,
-  update/3, check_status/1
+    find_entries/2,
+    find_static_stats/1,
+    find_stats_info/2,
+    change_status/1,
+    reset_stat/1
+    ]).
+
+%% Profile API
+-export([
+    save_profile/1,
+    load_profile/1,
+    delete_profile/1,
+    reset_profile/0,
+    get_profiles/0,
+    get_loaded_profile/0
+]).
+
+-export([
+    register/1,
+    update/3,
+    unregister/1,
+    aggregate/2
 ]).
 
 %% Metadata API
 -export([
-  get_profiles/0,
-  save_profile/1,
-  load_profile/1,
-  delete_profile/1,
-  reset_profile/0]).
+    check_status/1
+]).
 
 %% Exometer API
 -export([
-  read_cache/2,
-  write_cache/3, write_cache/4,
-  delete_cache/2]).
+    get_info/2,
+    get_datapoint/2,
+    select/1,
+    alias/1,
+    aliases/1,
+    aliases/2
+]).
 
-%%%===================================================================
-%%% API
-%%%===================================================================
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%% Console API %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--spec(get_priority() -> priority()).
-%% @doc get the priority from riak_stat_admin @end
-get_priority() ->
-  riak_stat_admin:priority().
+-spec(find_entries(statlist(), status()) -> stats()).
+%% @doc
+%% Find the entries in exometer if the metadata is disabled, return
+%% the stat name and its status : {Stat, Status}
+%% @end
+find_entries(Stats, Status) ->
+    case maybe_meta(fun find_entries_meta/2, {Stats, Status}) of
+        ?DISABLED_META_RESPONSE ->
+            find_entries_exom(Stats, Status);
+        Stats ->
+            Stats
+    end.
 
-%%%%%%%%%%%%%%% Admin API %%%%%%%%%%%%%%%%%%%
+find_entries_meta(Stats, Status) ->
+    case riak_stat_metadata:find_entries(Stats, Status) of
+        [] ->
+            legacy_search(Stats, Status);
+        {error, _Reason} ->
+            legacy_search(Stats, Status);
+        Entries ->
+            Entries
+    end.
 
--spec(register(data()) -> ok | error()).
-%% @doc register in metadata and pull out the status,
-%% and send that status to exometer @end
-register({Stat, Type, _Opts, Aliases} = Arg) ->
-  case register_in_metadata(Arg) of
-    [] ->
-      ok;
-    NewOpts ->
-      register_in_exometer(Stat, Type, NewOpts, Aliases)
-  end.
+find_entries_exom(Stats, Status) ->
+    case legacy_search(Stats, Status) of
+        [] ->
+            find_entries(Stats, Status);
+        Entries ->
+            Entries
+    end.
 
--spec(unregister(statname()) -> ok | error()).
-%% @doc set status to unregister in metadata, and delete
-%% in exometer @end
-unregister(StatName) ->
-  unregister_in_metadata(StatName),
-  unregister_in_exometer(StatName).
+-spec(legacy_search(stats(), status()) -> statlist()).
+%% @doc
+%% legacy code to find the stat and its status, in case it isn't
+%% found in metadata/exometer
+%% @end
+legacy_search(Stats, Status) ->
+    case the_legacy_search(Stats, Status) of
+        false ->
+            [];
+        Stats ->
+            Stats
+    end.
+
+the_legacy_search(Stats, Status) ->
+    lists:map(fun(Stat) ->
+        legacy_search(Stat, '_', Status)
+              end, Stats).
+legacy_search(Stat, Type, Status) ->
+    case re:run(Stat, "\\.", []) of
+        {match, _} ->
+            false;
+        nomatch ->
+            Re = <<"^", (make_re(Stat))/binary, "$">>,
+            [{Stat, legacy_search_(Re, Type, Status)}]
+    end.
+
+make_re(S) ->
+    repl(split_pattern(S, [])).
+
+repl([single | T]) ->
+    <<"[^_]*", (repl(T))/binary>>;
+repl([double | T]) ->
+    <<".*", (repl(T))/binary>>;
+repl([H | T]) ->
+    <<H/binary, (repl(T))/binary>>;
+repl([]) ->
+    <<>>.
+
+split_pattern(<<>>, Acc) ->
+    lists:reverse(Acc);
+split_pattern(<<"**", T/binary>>, Acc) ->
+    split_pattern(T, [double | Acc]);
+split_pattern(<<"*", T/binary>>, Acc) ->
+    split_pattern(T, [single | Acc]);
+split_pattern(B, Acc) ->
+    case binary:match(B, <<"*">>) of
+        {Pos, _} ->
+            <<Bef:Pos/binary, Rest/binary>> = B,
+            split_pattern(Rest, [Bef | Acc]);
+        nomatch ->
+            lists:reverse([B | Acc])
+    end.
+
+legacy_search_(N, Type, Status) ->
+    Found = aliases(regexp_foldr, [N]),
+    lists:foldr(
+        fun({Entry, DPs}, Acc) ->
+            case match_type(Entry, Type) of
+                true ->
+                    DPnames = [D || {D, _} <- DPs],
+                    case get_datapoint(Entry, DPnames) of
+                        {ok, Values} when is_list(Values) ->
+                            [{Entry, zip_values(Values, DPs)} | Acc];
+                        {ok, disabled} when Status == '_';
+                            Status == disabled ->
+                            [{Entry, zip_disabled(DPs)} | Acc];
+                        _ ->
+                            [{Entry, [{D, undefined} || D <- DPnames]} | Acc]
+                    end;
+                false ->
+                    Acc
+            end
+        end, [], orddict:to_list(Found)).
+
+match_type(_, '_') ->
+    true;
+match_type(Name, T) ->
+    T == get_info(Name, type).
+
+zip_values([{D, V} | T], DPs) ->
+    {_, N} = lists:keyfind(D, 1, DPs),
+    [{D, V, N} | zip_values(T, DPs)];
+zip_values([], _) ->
+    [].
+
+zip_disabled(DPs) ->
+    [{D, disabled, N} || {D, N} <- DPs].
+
+
+
+
+%%%----------------------------------------------------------------%%%
+
+-spec(find_static_stats(stats()) -> status()).
+%% @doc
+%% find all the stats in exometer with the value = 0
+%% @end
+find_static_stats(Stats) ->
+    case riak_stat_exometer:find_static_stats(Stats) of
+        [] ->
+            [];
+        {error, _Reason} ->
+            [];
+        Stats ->
+            Stats
+    end.
+
+%%%----------------------------------------------------------------%%%
+
+-spec(find_stats_info(stats(), info() | list()) -> statlist()).
+%% @doc
+%% find the information of a stat from the information given
+%% @end
+find_stats_info(Stats, Info) ->
+    riak_stat_exometer:find_stats_info(Stats, Info).
+
+%%%----------------------------------------------------------------%%%
 
 -spec(change_status(stats()) -> ok | error()).
-%% @doc change status in metadata and then in exometer @end
+%% @doc
+%% change status in metadata and then in exometer if metadata]
+%% is enabled.
+%% @end
 change_status(StatsList) ->
-  change_meta_status(StatsList),
-  change_exom_status(StatsList).
+    case maybe_meta(fun change_both_status/1, StatsList) of
+        ?DISABLED_META_RESPONSE ->
+            change_exom_status(StatsList);
+        Other ->
+            Other
+    end.
+
+change_both_status(StatsList) ->
+    change_meta_status(StatsList),
+    change_exom_status(StatsList).
+
+%%%----------------------------------------------------------------%%%
+
+-spec(reset_stat(statname()) -> ok).
+%% @doc
+%% reset the stat in exometer and in the metadata
+%% @end
+reset_stat(StatName) ->
+    Fun = fun reset_in_both/1,
+    case maybe_meta(Fun, StatName) of
+        ?DISABLED_META_RESPONSE ->
+            reset_exom_stat(StatName);
+        Ans ->
+            Ans
+    end.
+
+reset_in_both(StatName) ->
+    reset_meta_stat(StatName),
+    reset_exom_stat(StatName).
+
+select(Arg) ->
+    case maybe_meta(fun met_select/1, Arg) of
+        ?DISABLED_META_RESPONSE ->
+            exo_select(Arg);
+        Stats ->
+            Stats
+    end.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%% Profile API %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Before continuing - the API checks if the metadata is enabled
+%%% If it isn't it returns "Metadata is disabled"
+%%% If it is enabled it sends the data to the fun in the metadata
+%%% @end
+%%%-------------------------------------------------------------------
+
+save_profile(Profile) ->
+    maybe_meta(fun riak_stat_metadata:save_profile/1, Profile).
+
+load_profile(Profile) ->
+    maybe_meta(fun riak_stat_metadata:load_profile/1, Profile).
+
+delete_profile(Profile) ->
+    maybe_meta(fun riak_stat_metadata:delete_profile/1, Profile).
+
+reset_profile() ->
+    maybe_meta(fun riak_stat_metadata:reset_profile/0, []).
+
+get_profiles() ->
+    maybe_meta(fun riak_stat_metadata:get_profiles/0, []).
+
+get_loaded_profile() ->
+    maybe_meta(fun riak_stat_metadata:get_loaded_profile/0, []).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Admin API %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec(register(data()) -> ok | error()).
+%% @doc
+%% register in metadata and pull out the status,
+%% and send that status to exometer
+%% @end
+register({Stat, Type, Opts, Aliases} = Arg) ->
+    Fun = fun register_in_both/1,
+    case maybe_meta(Fun, Arg) of
+        ?DISABLED_META_RESPONSE ->
+            register_in_exometer(Stat, Type, Opts, Aliases);
+        Ans ->
+            Ans
+    end.
+
+register_in_both({Stat, Type, _Opts, Aliases}=StatInfo) ->
+    case register_in_metadata(StatInfo) of
+        [] -> ok;
+        NewOpts -> register_in_exometer(Stat, Type, NewOpts, Aliases)
+    end.
+
+%%%----------------------------------------------------------------%%%
 
 -spec(update(statname(), incrvalue(), type()) -> ok).
-%% @doc update unless disabled or unregistered @end
+%% @doc
+%% update unless disabled or unregistered
+%% @end
 update(Name, Inc, Type) ->
-  case check_in_meta(Name) of
-    [] ->
-      ok;
-    unregistered ->
-      ok;
-    _ ->
-      update_exom(Name, Inc, Type)
-  end.
+    Fun = fun check_in_meta/1,
+    case maybe_meta(Fun, Name) of
+        ?DISABLED_META_RESPONSE ->
+            update_exom(Name, Inc, Type);
+        ok -> ok;
+        _ -> update_exom(Name, Inc, Type)
+    end.
+
+%%%----------------------------------------------------------------%%%
+
+-spec(unregister(statname()) -> ok | error()).
+%% @doc
+%% set status to unregister in metadata, and delete
+%% in exometer
+%% @end
+unregister(StatName) ->
+    Fun = fun unregister_in_both/1,
+    case maybe_meta(Fun, StatName) of
+        ?DISABLED_META_RESPONSE ->
+            unregister_in_exometer(StatName);
+        Ans ->
+            Ans
+    end.
+
+unregister_in_both(StatName) ->
+    unregister_in_metadata(StatName),
+    unregister_in_exometer(StatName).
+
+%%%----------------------------------------------------------------%%%
+
+-spec(aggregate(pattern(), datapoint()) -> statlist()).
+aggregate(P, DP) ->
+    riak_stat_exometer:aggregate(P, DP).
+
+
+%%%===================================================================
+%%% Metadata API
+%%%===================================================================
+
+maybe_meta(Fun, Args) ->
+    case ?IS_ENABLED(?META_ENABLED) of
+        true ->
+            case Args of
+                []                      -> Fun();
+                {One, Two}              -> Fun(One, Two);
+                {One, Two, Three}       -> Fun(One, Two, Three);
+                {One, Two, Three, Four} -> Fun(One, Two, Three, Four);
+                One        -> Fun(One)
+            end;
+        false ->
+            ?DISABLED_META_RESPONSE
+    end.
+
+register_in_metadata(StatInfo) ->
+    riak_stat_metadata:register_stat(StatInfo).
+
+check_in_meta(Name) ->
+    riak_stat_metadata:check_meta(Name).
+
+check_status(Stat) ->
+    riak_stat_metadata:check_status(Stat).
+
+change_meta_status(Arg) ->
+    riak_stat_metadata:change_status(Arg).
+
+unregister_in_metadata(StatName) ->
+    riak_stat_metadata:unregister(StatName).
+
+reset_meta_stat(Arg) ->
+    riak_stat_metadata:reset_stat(Arg).
+
+met_select(Arg) ->
+    riak_stat_metadata:select(Arg).
+
 
 %%%===================================================================
 %%% Exometer API
 %%%===================================================================
 
 get_info(Name, Info) ->
-  riak_stat_exometer:info(Name, Info).
+    riak_stat_exometer:info(Name, Info).
 
 get_datapoint(Name, DP) ->
-  riak_stat_exometer:get_datapoint(Name, DP).
+    riak_stat_exometer:get_datapoint(Name, DP).
 
-select(Arg) ->
-  riak_stat_exometer:select_stat(Arg).
+exo_select(Arg) ->
+    riak_stat_exometer:select_stat(Arg).
 
 alias(Arg) ->
-  riak_stat_exometer:alias(Arg).
+    riak_stat_exometer:alias(Arg).
 
 aliases(Arg, Value) ->
-  riak_stat_exometer:aliases(Arg, Value).
+    riak_stat_exometer:aliases(Arg, Value).
 aliases({Arg, Value}) ->
-  riak_stat_exometer:aliases(Arg, Value).
-
-aggregate(A, S) ->
-  riak_stat_exometer:aggregate(A, S).
-
-%%%%%%%%%%%%%%% Console API %%%%%%%%%%%%%%%%%%%
-
-get_stat_info(Arg) ->
-  riak_stat_exometer:get_value(Arg).
-
-get_app_stats(Arg) ->
-  case get_priority() of
-    metadata ->
-      [Stat || {Stat, {status, _Status}} <- get_current_meta_stats()];
-    exometer ->
-      get_stats(Arg)
-  end.
-
-reset_stat(StatName) ->
-  reset_meta_stat(StatName),
-  reset_exom_stat(StatName).
-
-%%%===================================================================
-%%% Metadata API
-%%%===================================================================
-
-check_status(Stat) ->
-  riak_stat_metadata:check_status(Stat).
-
-%% Api     %%
-
-get_current_meta_stats() ->
-  riak_stat_metadata:get_current_stats().
-
-%% Admin   %%
-
-register_in_metadata(StatInfo) ->
-  riak_stat_metadata:register_stat(StatInfo).
-
-unregister_in_metadata(StatName) ->
-  riak_stat_metadata:unregister(StatName).
-
-change_meta_status(Arg) ->
-  riak_stat_metadata:change_status(Arg).
-
-reset_meta_stat(Arg) ->
-  riak_stat_metadata:reset_stat(Arg).
-
-check_in_meta(Name) ->
-  riak_stat_metadata:check_meta(Name).
-
-%%%%%%%%%%%%%%% Profile API %%%%%%%%%%%%%%%%%%%
-
-get_profiles() ->
-  riak_stat_metadata:get_profiles().
-
-save_profile(Profile) ->
-  riak_stat_metadata:save_profile(Profile).
-
-load_profile(Profile) ->
-  riak_stat_metadata:load_profile(Profile).
-
-delete_profile(Profile) ->
-  riak_stat_metadata:delete_profile(Profile).
-
-reset_profile() ->
-  riak_stat_metadata:reset_profile().
-
-%%%===================================================================
-%%% Exometer API
-%%%===================================================================
+    riak_stat_exometer:aliases(Arg, Value).
 
 register_in_exometer(StatName, Type, Opts, Aliases) ->
-  riak_stat_exometer:register_stat(StatName, Type, Opts, Aliases).
+    riak_stat_exometer:register_stat(StatName, Type, Opts, Aliases).
 
 unregister_in_exometer(StatName) ->
-  riak_stat_exometer:unregister_stat(StatName).
+    riak_stat_exometer:unregister_stat(StatName).
 
 change_exom_status(Arg) ->
-  riak_stat_exometer:change_status(Arg).
+    riak_stat_exometer:change_status(Arg).
 
 reset_exom_stat(Arg) ->
-  riak_stat_exometer:reset_stat(Arg).
-
-get_stats(Arg) ->
-  riak_stat_exometer:read_stats(Arg).
+    riak_stat_exometer:reset_stat(Arg).
 
 update_exom(Name, IncrBy, Type) ->
-  riak_stat_exometer:update_or_create(Name, IncrBy, Type).
+    riak_stat_exometer:update_or_create(Name, IncrBy, Type).
 
-%%%%%%%%% Caching %%%%%%%%%%% <- Unused
-
-read_cache(Name, DP) ->
-  riak_stat_exometer:read_cache(Name, DP).
-
-write_cache(Name, DP, Value) ->
-  write_cache(Name, DP, Value, undefined).
-
-write_cache(Name, DP, Value, TTL) ->
-  riak_stat_exometer:write_to_cache(Name, DP, Value, TTL).
-
-delete_cache(Name, DP) ->
-  riak_stat_exometer:delete_cache(Name, DP).
+%%% ------------------------------------------------------------------
