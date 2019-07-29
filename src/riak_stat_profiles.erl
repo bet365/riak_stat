@@ -1,8 +1,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Depends on riak_stat_admin which transforms the data inputted to
-%%% a format which works for metadata and exometer.
-%%% It sends data to exometer or metadata via riak_stat_coordinator
+%%% All things profile are in this gen_server, all calls from riak_stat
+%%% arrive here, are manipulated and sent to riak_stat_coordinator to
+%%% end up in the metadata.
+%%% Sends data to exometer or metadata via riak_stat_coordinator
 %%%
 %%% save-profile <entry> ->
 %%%     Saves the current stats and their status as a value to the
@@ -34,10 +35,6 @@
 %%%     but still enabled as loaded, therefore it can not be loaded again
 %%%     until it is deleted and created again, or the profile is reset
 %%%
-%%% Data persistence =>
-%%%     when data is persisted based on profile the gen_server will send a
-%%%     request to fetch the data from exometer and store it in metadata
-%%%     every 10s, until stop_persisting is called.
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
@@ -52,8 +49,6 @@
     load_profile/1,
     delete_profile/1,
     reset_profile/0,
-    persist_profile_data/1,
-    cancel_profile_persist/0,
     pull_profiles/0
 ]).
 
@@ -75,14 +70,13 @@
 
 -record(state, {
     profile = none, %% currently loaded profile
-    profilelist,    %% tableId
-    timerref
+    profilelist     %% tableId
 }).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-%% The data doesn't need to get parsed in profiles, it is only used as a
+%% The data doesn't need to get transformed in profiles, it is only used as a
 %% key, and not as a reference for anything else.
 
 
@@ -128,22 +122,6 @@ delete_profile(ProfileName) ->
 reset_profile() ->
     gen_server:call(?SERVER, reset).
 
--spec(persist_profile_data(data()) -> ok | error()).
-%% @doc
-%% persists the data of a specific profile, the stats that are enabled in that
-%% profile will be scraped from exometer for their values and stored in the
-%% metadata. default is every 1000 milliseconds
-%% @end
-persist_profile_data(Arg) ->
-    gen_server:cast(?SERVER, {persist, Arg, persist_repeat}).
-
--spec(cancel_profile_persist() -> ok | false).
-%% @doc
-%% Cancelling the profile persistence should be done from other modules,
-%% making it easier for the user
-%% @end
-cancel_profile_persist() ->
-    gen_server:cast(?SERVER, {persist, [], persist_stop}).
 
 %%--------------------------------------------------------------------
 -spec(start_link() ->
@@ -236,15 +214,7 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast({persist, Arg, Cont}, State = #state{profilelist = ProfileList}) ->
-    {Reply, NewState} =
-        case ets:lookup(ProfileList, Arg) of
-            [] -> {{error, no_profile}, State};
-            {Name, _NodeId} ->
-                TimerRef = persist_profile_(Name, Cont),
-                {ok, State#state{timerref = TimerRef}}
-        end,
-    {reply, Reply, NewState};
+
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -254,13 +224,7 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_info({persist_stop, _Name}, State = #state{timerref = TimerRef}) ->
-    Result = erlang:cancel_timer(TimerRef),
-    lager:info("Cancelled timer :~p~n", [Result]),
-    {noreply, State#state{timerref = []}};
-handle_info({persist_repeat, Name}, State) ->
-    TimerRef = persist_profile_(Name, persist_repeat),
-    {noreply, State#state{timerref = TimerRef}};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -295,15 +259,11 @@ delete_profile_(ProfileName) ->
 reset_profile_() ->
     riak_stat_coordinator:reset_profile().
 
-persist_profile_(ProfileName, Cont) ->
-    riak_stat_coordinator:persist_profile_data(ProfileName),
-    repeat(ProfileName, Cont).
-
-repeat(Arg, Info) ->
-    erlang:send_after(?PROFILE_PERSIST_DELAY, self(), {Info, Arg}).
-
 pull_profiles() ->
     riak_stat_coordinator:get_profiles().
 
 last_loaded_profile() ->
     riak_stat_coordinator:get_loaded_profile().
+
+
+%%%-------------------------------------------------------------------
