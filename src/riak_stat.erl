@@ -2,10 +2,7 @@
 %%% @doc
 %%% Top module of the riak_stat app.
 %%% Most of the _stat modules in riak will call directly into this module
-%%% to perform specific requests.
-%%%
-%%% This module calls into riak_stat_admin, riak_stat_console and
-%%% riak_stat_profile depending on what is needed
+%%% to perform specific requests through riak_admin.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(riak_stat).
@@ -14,7 +11,7 @@
 
 %% Console API
 -export([
-    show_stat_status/2,
+    show_stat_status/1,
     show_static_stats/1,
     disable_stat_0/1,
     show_stat_info/1,
@@ -36,8 +33,8 @@
     register/2,
     get_stats/0,
     get_app_stats/1,
-    get_stats_status/1,
     get_stats_info/1,
+    get_stats_values/1,
     get_value/1,
     aggregate/2,
     update/3,
@@ -48,7 +45,11 @@
 %% Other riak_core_console API
 -export([
     enable_metadata/1,
-    data_persist/2
+    enable_exoskeleskin/1,
+    timestamp/0,
+    stop/0,
+    start/0,
+    get_stat/1
 ]).
 
 -define(STAT_PREFIX, stat_prefix).
@@ -60,11 +61,11 @@
 %%% @doc
 %%% Functions that are called from riak_core_console that are specific
 %%% for the "riak-admin stat ..." commands.
-%%% Are sent to the riak_stat_console module depending on the cmd.
+%%% Are sent to the riak_stat_console module
 %%% @end
 %%%-------------------------------------------------------------------
 
--spec(show_stat_status(data(), status()) -> ok | print()).
+-spec(show_stat_status(data()) -> ok | print()).
 %% @doc
 %% A call of riak-admin stat show-enabled | show-disabled <entry>
 %% points to this function, it will by default go to metadata unless it
@@ -72,8 +73,8 @@
 %% It just returns a status or statuses of the entry or entries
 %% provided.
 %% @end
-show_stat_status(Arg, Status) ->
-    riak_stat_console:show_stat(Arg, Status).
+show_stat_status(Arg) ->
+    riak_stat_console:show_stat(Arg).
 
 -spec(show_static_stats(data()) -> ok | print()).
 %% @doc
@@ -92,17 +93,14 @@ show_static_stats(Arg) ->
 %% @doc
 %% like the function above it will find the stats in exometer that are not
 %% updating but will in turn disable them in both the metadata and in
-%% exometer so the change is persisted
+%% exometer
 %% @end
 disable_stat_0(Arg) ->
     riak_stat_console:disable_stat_0(Arg).
 
 -spec(show_stat_info(data()) -> ok | print()).
 %% @doc
-%% show the information that is kept in the metadata and in exometer for the stats
-%% given
-%% If the default is not metadata it will just return the information stored in
-%% exometer
+%% show the information that is kept in exometer for the stats given
 %% @end
 show_stat_info(Arg) ->
     riak_stat_console:stat_info(Arg).
@@ -142,8 +140,9 @@ reset_stat(Arg) ->
 %% Pull out the current stats status, and store the profile_name and
 %% list of stats into the metadata.
 %% All unregistered stats are stored as {status, unregistered}, but kept
-%% within the profile in case it becomes re_registered, it is defaulted to
-%% disabled.
+%% within the profile in case it becomes re_registered. If it is saved as
+%% unregistered before it gets re_registered again, upon load of that
+%% profile the stat will be ignored.
 %% @end
 save_current_profile(Arg) ->
     riak_stat_profiles:save_profile(Arg).
@@ -151,7 +150,12 @@ save_current_profile(Arg) ->
 -spec(load_profile(data()) -> ok | error()).
 %% @doc
 %% load a profile saved in the metadata, if the profile does not exist then
-%% {error, no_profile} is returned.
+%% {error, no_profile} is returned
+%% The stats and their status (enabled | disabled | unregistered) are stored
+%% in a list ([{StatName, {status, Status}}]) alongside the profile name,
+%% when the profile is loaded the stats are compared to the current status
+%% of stats and for any stats that are different; they are sent to exometer
+%% to get enabled/disabled.
 %% @end
 load_profile(Arg) ->
     riak_stat_profiles:load_profile(Arg).
@@ -197,6 +201,8 @@ reset_stats_and_profile() ->
 %%% @end
 %%%-------------------------------------------------------------------
 
+timestamp() -> ?TIMESTAMP.
+
 -spec(prefix() -> value()).
 %% @doc
 %% standard prefix for all stats inside riak, all modules call
@@ -204,6 +210,59 @@ reset_stats_and_profile() ->
 %% @end
 prefix() ->
     riak_stat_config:get_env(?STAT_PREFIX, riak).
+
+
+%%% ------------------------------------------------------------------
+
+-spec(get_stats() -> stats()).
+%% @doc
+%% Pulls all the stats out of metadata or exometer if metadata is disabled
+%% @end
+get_stats() ->
+    riak_stat_admin:get_stats().
+
+%%% ------------------------------------------------------------------
+
+
+-spec(get_stat(statname()) -> stats()).
+%% @doc
+%% get the stats from this path using ets:select
+%% @end
+get_stat(Path) ->
+    riak_stat_admin:get_stat(Path).
+
+-spec(get_value(data()) -> value()).
+%% @doc
+%% get the value of a stat
+%% @end
+get_value(Arg) ->
+    riak_stat_admin:get_stat_value(Arg).
+
+
+%%% ------------------------------------------------------------------
+
+-spec(get_app_stats(app()) -> ok | stats()).
+%% @doc
+%% pulls the list of stats out of riak_stat_admin for that app.
+%% @end
+get_app_stats(App) ->
+    riak_stat_admin:get_app_stats(App).
+
+-spec(get_stats_values(app()) -> statlist()).
+%% @doc
+%% Get the stats from exometer and their values for that app.
+%% @end
+get_stats_values(App) ->
+    riak_stat_admin:get_stats_values(App).
+
+-spec(get_stats_info(app()) -> stats()).
+%% @doc
+%% Pull the list of stats and all their info from exometer
+%% @end
+get_stats_info(App) ->
+    riak_stat_admin:get_stats_info(App).
+
+%%% ------------------------------------------------------------------
 
 -spec(register(app(), stats()) -> ok).
 %% @doc
@@ -213,45 +272,16 @@ prefix() ->
 register(App, Stats) ->
     riak_stat_admin:register(prefix(), App, Stats).
 
--spec(get_app_stats(app()) -> ok | stats()).
-%% @doc
-%% pulls the list of stats out of riak_stat_admin for that app.
-%% @end
-       get_app_stats(App) ->
-    riak_stat_admin:read_stats(App).
-
--spec(get_stats_status(app()) -> stats()).
-%% @doc
-%% Pull the list of stats and their status out of riak_core_metadata
-%% @end
-get_stats_status(App) ->
-    riak_stat_admin:get_stats_status(App).
-
--spec(get_stats_info(app()) -> stats()).
-%% @doc
-%% Pull the list of stats and their info from exometer
-%% @end
-get_stats_info(App) ->
-    riak_stat_admin:get_stats_info(App).
-
--spec(get_value(data()) -> value()).
-get_value(Arg) ->
-    riak_stat_admin:get_stat_value(Arg).
-
--spec(aggregate(app(), stats()) -> value()).
-%% @doc
-%% exometer has the functionality to aggregate the stats.
-%% @end
-aggregate(App, Stats) ->
-    riak_stat_admin:aggregate(App, Stats).
-
 -spec(update(stat(), non_neg_integer(), type()) -> ok | arg()).
+%% @doc
+%% update the stat
+%% @end
 update(Name, IncrBy, Type) ->
     riak_stat_admin:update(Name, IncrBy, Type).
 
 -spec(unregister(data()) -> ok | print()).
 %% @doc
-%% unregistering a stat puts tombstone in the metadata (if enabled)
+%% un-registering a stat puts a tombstone in the metadata (if enabled)
 %% deletes the metric in exometer
 %% @end
 unregister({Mod, Idx, Type, App}) ->
@@ -259,6 +289,14 @@ unregister({Mod, Idx, Type, App}) ->
 
 unregister(Mod, Idx, Type, App) ->
     riak_stat_admin:unregister(prefix(), App ,Mod, Idx, Type).
+
+-spec(aggregate(app(), stats()) -> value()).
+%% @doc
+%% exometer has the functionality to aggregate the stats.
+%% @end
+%% TODO: apply functionality to aggregate stats from riak-admin commands
+aggregate(Stats, DPs) ->
+    riak_stat_admin:aggregate(Stats, DPs).
 
 
 %%%===================================================================
@@ -271,13 +309,6 @@ unregister(Mod, Idx, Type, App) ->
 %%% @end
 %%%-------------------------------------------------------------------
 
--spec(get_stats() -> stats()).
-%% @doc
-%% Pulls all the stats out of metadata or exometer if metadata is disabled
-%% @end
-get_stats() ->
-    riak_stat_coordinator:get_stats().
-
 -spec(enable_metadata(data()) -> ok).
 %% @doc
 %% enabling the metadata allows the stats configuration and the stats values to
@@ -287,35 +318,35 @@ get_stats() ->
 %% @end
 enable_metadata(Arg) ->
     Truth = ?IS_ENABLED(?META_ENABLED),
-    case riak_stat_admin:data_sanitise(Arg) of
+    case data_sanitise(Arg) of
         Truth ->
-            case Truth of
-                true ->
-                    io:fwrite("Metadata already enabled~n");
-                false ->
-                    io:fwrite("Metadata already disabled~n")
-            end;
+            io:fwrite("Metadata-enabled already set to ~s~n", [Arg]);
         Bool when Bool == true; Bool == false ->
             set_env(?META_ENABLED, Bool);
         _ ->
             io:fwrite("Wrong argument entered: ~p~n", [_])
     end.
 
--spec(data_persist(datapersist(), data()) -> ok | error()).
+
+-spec(enable_exoskeleskin(data()) -> ok).
 %% @doc
-%% Data can be pulled out of exometer and stored into the metadata in
-%% order to be put into a DETS. It takes the argument Arg the same as
-%% any of the other console commands, "riak.riak_kv.**" etc...
-%%
-%% for data_persist(profile, Arg) the Arg will be the name of a profile
-%% stored in the metadata, specific to data persistence ot not.
+%% The exoskeleskin sub-app is part of riak_stat, it starts up a gen_server for
+%% http and udp requests to push stats to an endpoint, default is false, so the
+%% exoskeleskin is disabled, but its status is also saved in the metadata
+%% so it can be enabled when it is restarted as well
 %% @end
-data_persist(enabled, Arg) ->
-    riak_stat_admin:persist_data(Arg);
-data_persist(disabled, Arg) ->
-    riak_stat_admin:unpersist_data(Arg);
-data_persist(profile, Arg) ->
-    riak_stat_profiles:persist_profile_data(Arg).
+enable_exoskeleskin(Arg) ->
+    Truth = ?IS_ENABLED(?EXOSKEL_ENABLED),
+    case data_sanitise(Arg) of
+        Truth ->
+            io:fwrite("Exoskeleskin already enabled~n");
+        Bool when Bool == true, Bool == false ->
+            set_env(?EXOSKEL_ENABLED, Bool);
+        _ ->
+            io:fwrite("Wrong Argument Entered~n")
+    end.
+
+
 
 %%%===================================================================
 %%% Helper Functions
@@ -323,3 +354,15 @@ data_persist(profile, Arg) ->
 
 set_env(Arg, Value) ->
     riak_stat_config:set_env(Arg, Value).
+
+data_sanitise(Arg) ->
+    {Data, _Other, _Stuff} = riak_stat_admin:data_sanitise(Arg),
+    Data.
+
+%%%%%%% TESTING %%%%%%%
+
+start() ->
+    riak_stat_exometer:start().
+
+stop() ->
+    riak_stat_exometer:stop().
