@@ -3,10 +3,20 @@
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
--author("savannahallsop").
 
--type exometererror() :: no_template | exists | no_found.
--type profileerror()  :: no_stats | profile_exists_already | no_data | no_profile.
+-define(CACHE, riak_stat_config:get_env(exometer_cache, {cache, 5000})).
+-define(PFX, riak_stat:prefix()).
+-define(TIMESTAMP, riak_stat_exometer:timestamp()).
+
+-define(META_ENABLED, metadata_enabled).
+-define(EXOSKEL_ENABLED, exoskeleton_enabled).
+
+-define(IS_ENABLED(Arg),  riak_stat_config:get_env(Arg) == true).
+-define(IS_DISABLED(Arg), riak_stat_config:get_env(Arg) == false).
+-define(DISABLED_META_RESPONSE, io:fwrite("Metadata is Disabled~n")).
+
+-type exometererror() :: no_template | exists | not_found.
+-type profileerror()  :: profile_exists_already | no_stats | no_data | no_profile.
 -type metaerror()     :: unregistered | no_stat | no_status.
 -type reason()        :: exometererror() | profileerror() | metaerror() | any().
 -type error()         :: {error, reason()}.
@@ -16,7 +26,7 @@
 -type aliases()       :: list() | atom().
 -type info()          :: name | type | module | value | cache| status |
                          timestamp | options | ref | datapoints | entry.
--type datapoint()     :: info() | list().
+-type datapoint()     :: info() | list() | integer().
 -type opt_tup()       :: {atom(), any()}.
 -type options()       :: list() | opt_tup().
 -type statlist()      :: list().
