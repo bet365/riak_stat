@@ -14,12 +14,9 @@
 
 %% OPTIONAL ENVIRONMENT VARIABLES
 
-%%-define(SEND_TO_UDP,           riak_stat_config:get_env(send_to_udp, false)).
 -define(EXCLUDED_DATAPOINTS,   riak_stat_config:get_env(exoskeleskin_excluded_datapoints, [ms_since_reset])).
-%%-define(SEND_TO_HTTP,          riak_stat_config:get_env(send_to_http, true)).
 -define(STATS_LISTEN_PORT,     riak_stat_config:get_env(stats_listen_port, 9000)).
 -define(EXOSKELETABLE,         exoskeleskin_state).
-%% REQUIRED ENVIRONMENT VARIABLES
 
 -define(INSTANCE,              riak_stat_config:get_env(instance)).
 -define(MONITOR_SERVER,        riak_stat_config:get_env(monitor_server)).

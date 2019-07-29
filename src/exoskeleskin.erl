@@ -14,15 +14,6 @@
     disable_port/1
 ]).
 
-%% API
--export([
-    enable/2,
-    disable/2,
-    change_port/1,
-    restart/1,
-    restart/2
-]).
-
 -spec(get_host(atom()) -> term()).
 %% @doc
 %% ETS table acts as a permanent state as the gen_servers are temporary,
@@ -59,115 +50,115 @@ disable_port(Arg) ->
 
 
 
-
-enable(udp, Por) ->
-    Port = exoskelestats:parse_data(Por),
-    case get_host() of
-        {error, no_udp_socket} ->
-            enable_udp(Port);
-        {_Socket, _Host, UPort} when UPort == Port ->
-            lager:error("UDP already enabled"),
-            ok;
-        {_Socket, _Host, _UPort} ->
-            change_port(udp, Port)
-    end;
-enable(http, Por) ->
-    Port = exoskelestats:parse_data(Por),
-    case get_http() of
-        {error, no_http_socket} ->
-            enable_http(Port);
-        {_Sock, _Host, HPort} when HPort == Port ->
-            lager:error("Port already open with http~n"),
-            ok;
-        {_Sock, _Host, _HPort} ->
-            change_port(http, Port)
-    end.
-
-enable_udp(Port) ->
-    exoskele_sup:start_server(exoskele_udp, Port).
-enable_http(Port) ->
-    exoskele_sup:start_server(exoskele_http, Port).
-
-disable(udp, _Port) ->
-    case get_host() of
-        {error, no_udp_socket} ->
-            ok;
-        {_Socket, _Host, _MPort} ->
-            disable_udp()
-    end,
-    ok;
-disable(http, _Port) ->
-    case get_http() of
-        {error, no_http_socket} ->
-            ok;
-        {_So, _In, _fo} ->
-            disable_http()
-    end.
-
-disable_udp() ->
-    exoskele_sup:stop_server(exoskele_udp).
-disable_http() ->
-    exoskele_sup:stop_server(exoskele_http).
-
-change_port(Arg) ->
-    {Type, Por} = exoskelestats:parse_arg(Arg),
-    Port = exoskelestats:parse_data(Por),
-    change_port(Type, Port).
-
-change_port(Type, Por) ->
-    Port = exoskelestats:parse_data(Por),
-      case get_host() of
-          {error, no_udp_socket} ->
-              case get_http() of
-                  {error, no_http_socket} ->
-                      case Type of
-                          udp ->
-                              enable_udp(Port);
-                          http ->
-                              enable_http(Port);
-                          undefined ->
-                              io:fwrite("error, type not defined~n")
-                      end;
-                  _ ->
-                      case Type of
-                          udp ->
-                              disable_http(),
-                              enable_udp(Port);
-                          http ->
-                              restart(http, Port);
-                          undefined ->
-                              restart(http, Port)
-                      end
-              end;
-            _ ->
-              case Type of
-                  udp ->
-                      enable_udp(Port);
-                  http ->
-                      disable_udp(),
-                      enable_http(Port);
-                  undefined ->
-                      restart(udp, Port)
-              end
-    end.
-
-restart(udp, Por) ->
-    Port = exoskelestats:parse_data(Por),
-    disable_udp(),
-    enable_udp(Port),
-    lager:info("Port for UDP=~p~n", [Port]);
-restart(http, Por) ->
-    Port = exoskelestats:parse_data(Por),
-    disable_http(),
-    enable_http(Port),
-    lager:info("Port for HTTP=~p~n", [Port]).
-
-restart(udp) ->
-    restart(udp, 0);
-restart(http) ->
-    restart(http, 0);
-restart(Arg)->
-    {Type, Port} = exoskelestats:parse_arg(Arg),
-    restart(Type, Port).
-
-
+%%
+%%enable(udp, Por) ->
+%%    Port = exoskelestats:parse_data(Por),
+%%    case get_host() of
+%%        {error, no_udp_socket} ->
+%%            enable_udp(Port);
+%%        {_Socket, _Host, UPort} when UPort == Port ->
+%%            lager:error("UDP already enabled"),
+%%            ok;
+%%        {_Socket, _Host, _UPort} ->
+%%            change_port(udp, Port)
+%%    end;
+%%enable(http, Por) ->
+%%    Port = exoskelestats:parse_data(Por),
+%%    case get_http() of
+%%        {error, no_http_socket} ->
+%%            enable_http(Port);
+%%        {_Sock, _Host, HPort} when HPort == Port ->
+%%            lager:error("Port already open with http~n"),
+%%            ok;
+%%        {_Sock, _Host, _HPort} ->
+%%            change_port(http, Port)
+%%    end.
+%%
+%%enable_udp(Port) ->
+%%    exoskele_sup:start_server(exoskele_udp, Port).
+%%enable_http(Port) ->
+%%    exoskele_sup:start_server(exoskele_http, Port).
+%%
+%%disable(udp, _Port) ->
+%%    case get_host() of
+%%        {error, no_udp_socket} ->
+%%            ok;
+%%        {_Socket, _Host, _MPort} ->
+%%            disable_udp()
+%%    end,
+%%    ok;
+%%disable(http, _Port) ->
+%%    case get_http() of
+%%        {error, no_http_socket} ->
+%%            ok;
+%%        {_So, _In, _fo} ->
+%%            disable_http()
+%%    end.
+%%
+%%disable_udp() ->
+%%    exoskele_sup:stop_server(exoskele_udp).
+%%disable_http() ->
+%%    exoskele_sup:stop_server(exoskele_http).
+%%
+%%change_port(Arg) ->
+%%    {Type, Por} = exoskelestats:parse_arg(Arg),
+%%    Port = exoskelestats:parse_data(Por),
+%%    change_port(Type, Port).
+%%
+%%change_port(Type, Por) ->
+%%    Port = exoskelestats:parse_data(Por),
+%%      case get_host() of
+%%          {error, no_udp_socket} ->
+%%              case get_http() of
+%%                  {error, no_http_socket} ->
+%%                      case Type of
+%%                          udp ->
+%%                              enable_udp(Port);
+%%                          http ->
+%%                              enable_http(Port);
+%%                          undefined ->
+%%                              io:fwrite("error, type not defined~n")
+%%                      end;
+%%                  _ ->
+%%                      case Type of
+%%                          udp ->
+%%                              disable_http(),
+%%                              enable_udp(Port);
+%%                          http ->
+%%                              restart(http, Port);
+%%                          undefined ->
+%%                              restart(http, Port)
+%%                      end
+%%              end;
+%%            _ ->
+%%              case Type of
+%%                  udp ->
+%%                      enable_udp(Port);
+%%                  http ->
+%%                      disable_udp(),
+%%                      enable_http(Port);
+%%                  undefined ->
+%%                      restart(udp, Port)
+%%              end
+%%    end.
+%%
+%%restart(udp, Por) ->
+%%    Port = exoskelestats:parse_data(Por),
+%%    disable_udp(),
+%%    enable_udp(Port),
+%%    lager:info("Port for UDP=~p~n", [Port]);
+%%restart(http, Por) ->
+%%    Port = exoskelestats:parse_data(Por),
+%%    disable_http(),
+%%    enable_http(Port),
+%%    lager:info("Port for HTTP=~p~n", [Port]).
+%%
+%%restart(udp) ->
+%%    restart(udp, 0);
+%%restart(http) ->
+%%    restart(http, 0);
+%%restart(Arg)->
+%%    {Type, Port} = exoskelestats:parse_arg(Arg),
+%%    restart(Type, Port).
+%%
+%%
