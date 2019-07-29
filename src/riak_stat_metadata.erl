@@ -18,8 +18,10 @@
     put/4,
     get_all/1,
     delete/2,
+    select/1,
     select/2,
-    replace/2
+    replace/2,
+    find_entries/2
 ]).
 
 %% API
@@ -106,6 +108,8 @@ get_all(Prefix) ->
 delete(Prefix, Key) ->
     riak_core_metadata:delete(Prefix, Key).
 
+select(MatchSpec) ->
+    select(?STATPFX, MatchSpec).
 -spec(select(metadata_prefix(), pattern()) -> metadata_value()).
 %% @doc
 %% use the ets:select in the metadata to pull the value wanted from the metadata
@@ -123,19 +127,17 @@ select(Prefix, MatchSpec) ->
 replace(Prefix, MatchSpec) ->
     riak_core_metadata:replace(Prefix, MatchSpec).
 
-%%-spec(ms(function()) -> pattern()).
-%%%% @doc
-%%%% turn a fun into a match spec
-%%%% @end
-%%ms(Fun) ->
-%%    ets:fun2ms(Fun).
-%%
-%%-spec(get_put_ms(pattern()) -> {match, pattern()}).
-%%%% @doc
-%%%% puts the match_spec into a form usable in the riak_core_metadata
-%%%% @end
-%%get_put_ms(MatchSpec) ->
-%%    {match, MatchSpec}.
+-spec(find_entries(statlist(), status()) -> stats()).
+%% @doc
+%% Use an ets:select to find the stats in the metadata of the same status as
+%% the one given, default at riak_core_console level - is enabled.
+%% @end
+find_entries(Stats, Status) ->
+    lists:map(fun(Stat) ->
+        select(?STATPFX,
+            [{{Stat, {'$2','_','_','_'}}, {'==', '$2', Status},{Stat, '$2'}}])
+              end, Stats).
+
 
 %%%===================================================================
 %%% Profile API
@@ -144,50 +146,56 @@ replace(Prefix, MatchSpec) ->
 -spec(save_profile(profilename()) -> ok | error()).
 %% @doc
 %% Take the stats and their status out of the metadata for the current
-%% node and save it into the metadata as a profile - works on one node
+%% node and save it into the metadata as a profile - works on per node
 %% @end
 save_profile(ProfileName) ->
-    StatsStatus = get_stats_status(),
-    register_profile(ProfileName, StatsStatus).
-
-register_profile(ProfileName, Stats) ->
     case check_meta(?PROFILEKEY(ProfileName)) of
-        [] ->
-            put(?PROFPFX, ProfileName, Stats);
-        _ ->
-            {error, profile_exists_already}
+        [] -> put(?PROFPFX, ProfileName, get_stats_status());
+        _  -> {error, profile_exists_already}
     end.
 
 
 -spec(load_profile(profilename()) -> ok | error()).
 %% @doc
-%% Find the profile in the metadata and pull out stats to change them
+%% Find the profile in the metadata and pull out stats to change them.
 %% It will compare the current stats with the profile stats and will
-%% change the ones that need changing to prevent errors
+%% change the ones that need changing to prevent errors/less expense
 %% @end
 load_profile(ProfileName) ->
-    case get_profile_stats(ProfileName) of
+    case check_meta(?PROFILEKEY(ProfileName)) of
         {error, Reason} ->
             {error, Reason};
         ProfileStats ->
             CurrentStats = get_stats_status(),
             ToChange = the_alpha_stat(ProfileStats, CurrentStats),
             %% delete stats that are already enabled/disabled, any duplicates
-            %% with different statuses will be replace with the profile one
+            %% with different statuses will be replaced with the profile one
             change_stat_list_to_status(ToChange),
             put(?LOADEDPFX, ?LOADEDKEY, ProfileName)
     end.
 
-get_profile_stats(ProfileName) ->
-    case check_meta(?PROFILEKEY(ProfileName)) of
-        [] ->
-            {error, no_stats};
-        Stats ->
-            Stats
-    end.
-
+-spec(the_alpha_stat(Alpha :: list(), Beta :: list()) -> term()).
+%% @doc
+%% In the case where one list should take precedent, which is most
+%% likely the case when registering in both exometer and metadata, the options
+%% hardcoded into the stats may change, or the primary kv for stats statuses
+%% switches, in every case, there must be an alpha.
+%% @end
 the_alpha_stat(Alpha, Beta) ->
-    riak_stat_admin:the_alpha_stat(Alpha, Beta).
+% The keys are sorted first with ukeysort which deletes duplicates, then merged
+% so any key with the same stat name that is both enabled and disabled returns
+% only the enabled option, where it is enabled in the alpha.
+    AlphaList = the_alpha_map(Alpha),
+    BetaList = the_alpha_map(Beta),
+    lists:ukeymerge(2, lists:ukeysort(1, AlphaList), lists:ukeysort(1, BetaList)).
+% The stats must fight, to become the alpha
+
+the_alpha_map(A_B) ->
+    lists:map(fun
+                  ({Stat, {Atom, Val}}) -> {Stat, {Atom, Val}};
+                  ({Stat, Val})         -> {Stat, {atom, Val}};
+                  ([]) -> []
+              end, A_B).
 
 change_stat_list_to_status(StatusList) ->
     riak_stat_coordinator:change_status(StatusList).
@@ -222,7 +230,7 @@ reset_profile() ->
     % change from disabled to enabled
 
 change_stats_from(Stats, Status) ->
-    ToChange =
+    change_stat_list_to_status(
         lists:foldl(fun
                         ({Stat, {status, St}}, Acc) when St == Status ->
                             NewSt =
@@ -233,8 +241,7 @@ change_stats_from(Stats, Status) ->
                             [{Stat, {status, NewSt}} | Acc];
                         ({_Stat, {status, St}}, Acc) when St =/= Status ->
                             Acc
-                    end, [], Stats),
-    change_stat_list_to_status(ToChange).
+                    end, [], Stats)).
 
 
 -spec(get_profiles() -> metadata_value()).
@@ -354,9 +361,6 @@ vc_inc(Count) -> Count + 1.
 %%% Admin API
 %%%===================================================================
 
-%%get_stats_from_path(Path) ->
-%%    select(?STATPFX, [{{Path, {'_','_','_','_'}},[],['$_']}]).
-
 -spec(get_stats_status() -> metadata_value()).
 %% @doc
 %% retrieving the stats out of the metadata and their status
@@ -385,7 +389,6 @@ register_stat(StatName, Type, Opts, Aliases) ->
             re_register_stat(StatName, {Status, Type, [{vclock, vclock:fresh(?NODEID, 1)} | MetaOpts], Aliases}),
             Opts;
         unregistered -> [];
-    %%      {error, unregistered};
         {MStatus, Type, MetaOpts, Aliases} -> % if registered
             {Status, NewMetaOptions, NewOpts} = find_status(re_reg, {Opts, MStatus, MetaOpts}),
             re_register_stat(StatName, {Status, Type, NewMetaOptions, Aliases}),
@@ -460,55 +463,3 @@ reset_resets() ->
         {Status, Type, Opts, Aliases} = check_meta(?STATKEY(Stat)),
         set_options({Stat, {Status, Type, Opts, Aliases}}, {resets, 0})
                   end, get_all(?STATPFX)).
-
-
-
-
-
-
-
-
-%%%===================================================================
-%%% Exoskeleskin API
-%%%===================================================================
-
-
-%%meta_select(Prefix, Pattern) when is_list(Pattern) ->
-%%    try list_to_tuple(Pattern) of
-%%        T -> meta_select(Prefix, T)
-%%    catch
-%%        error:_  ->
-%%            lager:error("Pattern for metadata iterator wrong format ~n")
-%%            NP = ets:fun2ms(fun({Stat, {Type, Opts, Aliases}}) when Prefix =:= ?STATPFX ->
-%%                    {Stat, {Type, Opts, Aliases}}
-%%                       end),
-%%            meta_select(Prefix, NP)
-%%    end;
-%%meta_select(Prefix, Pattern) when is_tuple(Pattern) ->
-%%    MatchSpec = {match, Pattern},
-%%    riak_core_metadata:iterator(Prefix, MatchSpec).
-
-%%%%%%%%%%%%%%%%%%%%%%%%
-%%% data persistence %%%
-%%%%%%%%%%%%%%%%%%%%%%%%
-
-%%-spec(persist_profile_data(profilename()) -> ok | error()).
-%%%% @doc
-%%%% stats that are enabled and saved in this profile are put into the metadata and
-%%%% persisted, scraped every 10 seconds and saved into the metadata
-%%%% @end
-%%persist_profile_data(Profile) ->
-%%    case get_profile_stats(Profile) of
-%%        {error, Reason} ->
-%%            {error, Reason};
-%%        ProfileStats ->
-%%            EnabledStats = find_stats(ProfileStats, enabled),
-%%            StatsValues  = pull_from_exom(EnabledStats),
-%%            lists:map(fun({Stat, Value}) ->
-%%                put(?LOADEDPFX, Stat, Value)
-%%                      end, StatsValues)
-%%    end,
-%%    ok.
-
-%%pull_from_exom(Stats) ->
-%%    riak_stat_coordinator:get_stats_values(Stats).
