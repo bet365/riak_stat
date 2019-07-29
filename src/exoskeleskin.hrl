@@ -18,8 +18,8 @@
 -define(EXCLUDED_DATAPOINTS,   riak_stat_config:get_env(exoskeleskin_excluded_datapoints, [ms_since_reset])).
 -define(SEND_TO_HTTP,          riak_stat_config:get_env(send_to_http, true)).
 
--define(UDP_ENABLED,           riak_stat_config:get_env(udp_enabled, false)).
--define(HTTP_ENABLED,          riak_stat_config:get_env(http_enabled, true)).
+%%-define(UDP_ENABLED,           riak_stat_config:get_env(udp_enabled, false)).
+%%-define(HTTP_ENABLED,          riak_stat_config:get_env(http_enabled, true)).
 
 %% REQUIRED ENVIRONMENT VARIABLES
 
@@ -27,3 +27,15 @@
 -define(MONITOR_SERVER,        riak_stat_config:get_env(monitor_server)).
 -define(MONITOR_LATENCY_PORT,  riak_stat_config:get_env(monitor_latency_port)).
 -define(MONITOR_STATS_PORT,    riak_stat_config:get_env(monitor_stats_port)).
+
+-type protocol()          :: udp | http.
+-type socket()            :: inet:socket().
+-type latency_port()      :: inet:port_number().
+%%-type port()              :: inet:port_number() | non_neg_integer().
+-type instance()          :: string().
+-type server_ip()         :: inet:ip4_address().
+-type server()            :: inet:ip4_address().
+-type hostname()          :: inet:hostname().
+
+-type sanitised_data()     :: {protocol(), socket(), latency_port(), port(),
+                              instance(), server(), server_ip()}.
