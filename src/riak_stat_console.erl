@@ -15,7 +15,7 @@
 
 %% API
 -export([
-    show_stat/2,
+    show_stat/1,
     show_stat_0/1,
     stat_info/1,
     disable_stat_0/1,
@@ -44,16 +44,16 @@
 %%% API
 %%%===================================================================
 
--spec(show_stat(data(), status()) -> value()).
+-spec(show_stat(data()) -> value()).
 %% @doc
 %% Show enabled or disabled stats
 %% when using riak-admin stat show riak.** enabled stats will show by default
 %%
 %% otherwise use: riak-admin stat show-enabled | show-disabled
 %% @end
-show_stat(Arg, Status) ->
-    StatsNames = data_sanitise(Arg),
-    Stats = gen_server:call(?SERVER, {show, StatsNames, Status}),
+show_stat(Arg) ->
+    {_S, MatchSpec, DP} = data_sanitise(Arg),
+    Stats = gen_server:call(?SERVER, {show, MatchSpec, DP}),
     print_stats(Stats).
 
 -spec(show_stat_0(data()) -> value()).
@@ -61,8 +61,8 @@ show_stat(Arg, Status) ->
 %% Check which stats in exometer are not updating, only checks enabled
 %% @end
 show_stat_0(Arg) ->
-    StatNames = data_sanitise(Arg),
-    NotUpdating = gen_server:call(?SERVER, {show_stat_0, StatNames}),
+    {_Stats, MatchSpec, _DP} = data_sanitise(Arg),
+    NotUpdating = gen_server:call(?SERVER, {show_stat_0, MatchSpec}),
     print_stats(NotUpdating).
 
 -spec(stat_info(data()) -> value()).
@@ -71,8 +71,8 @@ show_stat_0(Arg) ->
 %% @end
 stat_info(Arg) ->
     {Attrs, RestArg} = pick_info_attrs(Arg),
-    StatNames = data_sanitise(RestArg),
-    Found = gen_server:call(?SERVER, {stat_info, StatNames, Attrs}),
+    {Stats, _MatchSpec, _DP} = data_sanitise(RestArg),
+    Found = gen_server:call(?SERVER, {stat_info, Stats, Attrs}),
     print_stats(Found).
 
 -spec(disable_stat_0(data()) -> ok).
@@ -81,15 +81,15 @@ stat_info(Arg) ->
 %% are not updating
 %% @end
 disable_stat_0(Arg) ->
-    StatNames = data_sanitise(Arg),
-    gen_server:call(?SERVER, {disable_stat_0, StatNames}).
+    {_S, MatchSpec, _DP} = data_sanitise(Arg),
+    gen_server:call(?SERVER, {disable_stat_0, MatchSpec}).
 
 -spec(status_change(data(), status()) -> ok).
 %% @doc
 %% change the status of the stat (in metadata and) in exometer
 %% @end
 status_change(Arg, ToStatus) ->
-    Stats = data_sanitise(Arg),
+    {Stats, _MatchSpec, _DP} = data_sanitise(Arg),
     gen_server:call(?SERVER, {change_status, Stats, ToStatus}).
 
 -spec(reset_stat(data()) -> ok).
@@ -98,8 +98,8 @@ status_change(Arg, ToStatus) ->
 %% has been reset
 %% @end
 reset_stat(Arg) ->
-    StatNames = data_sanitise(Arg),
-    gen_server:call(?SERVER, {reset, StatNames}).
+    {Stats, _MatchSpec, _DP} = data_sanitise(Arg),
+    gen_server:call(?SERVER, {reset, Stats}).
 
 %%%===================================================================
 %%% Admin API
@@ -113,13 +113,15 @@ print_stats(Entries) ->
 print_stats(Entries, Attributes) ->
     riak_stat_admin:print(Entries, Attributes).
 
-
 %%%===================================================================
 %%% Coordinator API
 %%%===================================================================
 
 find_entries(StatNames, Status) ->
     riak_stat_coordinator:find_entries(StatNames, Status).
+
+select_entries(MS) ->
+    riak_stat_coordinator:select(MS).
 
 not_updating(StatNames) ->
     riak_stat_coordinator:find_static_stats(StatNames).
@@ -159,17 +161,25 @@ init([]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_call({show, Arg, Status}, _From, State) ->
-    Reply = find_entries(Arg, Status),
+handle_call({show, MS, DP}, _From, State) ->
+    Entries = select_entries(MS),
+    Reply =
+    case DP of
+        default -> [{Entry, Status} || {Entry, _, Status} <- Entries];
+        _ -> [find_stat_info(Entry, DP) || {Entry, _, _} <- Entries]
+    end,
     {reply, Reply, State};
 handle_call({show_stat_0, Arg}, _From, State) ->
-    Reply = not_updating(Arg),
+    Entries = [Entry || {Entry, _,_} <- select_entries(Arg)],
+    Reply = not_updating(Entries),
     {reply, Reply, State};
 handle_call({stat_info, Arg, Attrs}, _From, State) ->
-    Reply = find_stat_info(Arg, Attrs),
+    Entries = find_entries(Arg, enabled),
+    Reply = [find_stat_info(Entry, Attrs) || {Entry, _} <- Entries],
     {reply, Reply, State};
 handle_call({disable_stat_0, Arg}, _From, State) ->
-    NotUpdating = not_updating(Arg),
+    Entries = [Entry || {Entry, _,_} <- select_entries(Arg)],
+    NotUpdating = not_updating(Entries),
     DisableTheseStats =
     lists:map(fun({Name, _V}) ->
         {Name, {status, disabled}}
@@ -185,7 +195,7 @@ handle_call({change_status, CleanStats, ToStatus}, _From, State) ->
     change_status([{Stat, {status, Status}} || {Stat, Status} <- Entries]),
     {reply, ok, State};
 handle_call({reset, Stats}, _From, State) ->
-    reset_stats(find_entries(Stats, enabled)),
+    reset_stats([Entry || {Entry, _} <- find_entries(Stats, enabled)]),
     {reply, ok, State};
 handle_call({Request, _Arg}, _From, State) ->
     {reply, {error, Request}, State};
