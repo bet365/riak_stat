@@ -211,7 +211,7 @@ change_stat_list_to_status(StatusList) ->
 delete_profile(ProfileName) ->
     case check_meta(?LOADEDPKEY) of
         ProfileName ->
-            put(?LOADEDPFX, ?LOADEDKEY, [<<>>]),
+            put(?LOADEDPFX, ?LOADEDKEY, [<<"none">>]),
             delete(?PROFPFX, ProfileName);
         _ ->
             delete(?PROFPFX, ProfileName)
@@ -226,8 +226,10 @@ delete_profile(ProfileName) ->
 %% @end
 reset_profile() ->
     CurrentStats = get_stats_status(),
+    put(?LOADEDPFX, ?LOADEDKEY, [<<"none">>]),
     change_stats_from(CurrentStats, disabled).
     % change from disabled to enabled
+
 
 change_stats_from(Stats, Status) ->
     change_stat_list_to_status(

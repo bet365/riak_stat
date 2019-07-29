@@ -147,13 +147,9 @@ init([]) ->
         {read_concurrency, true}
       ]),
     Loaded = last_loaded_profile(),
-    Profile =
-    case lists:member(Loaded, Profiles) of
-        true -> Loaded;
-        false -> none
-    end,
     ets:insert(Tid, Profiles),
-    {ok, #state{profilelist = Tid, profile = Profile}}.
+    gen_server:call(?SERVER, {load, Loaded})
+    {ok, #state{profilelist = Tid}}.
 
 %%--------------------------------------------------------------------
 
