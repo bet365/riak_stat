@@ -3,10 +3,8 @@
 %%% Functions from _stat modules or from to register, update, read
 %%% or unregister a stat.
 %%% @end
-%%% Created : 27. Jun 2019 15:08
 %%%-------------------------------------------------------------------
 -module(riak_stat_admin).
--author("Savannah Allsop").
 
 -include("riak_stat.hrl").
 
@@ -14,171 +12,162 @@
 
 %% API
 -export([
-  get_stats/0,
-  get_stats_status/1,
-  get_stats_info/1,
-  priority/0,
-  read_stats/1,
-  get_stat_value/1,
-  aggregate/2,
-  set_priority/1]).
+    get_stats/0,
+    get_stat/1,
+    get_stat_value/1,
+    get_app_stats/1,
+    get_stats_values/1,
+    get_stats_info/1,
 
-%% Data API
+    register/3,
+    unregister/5,
+    update/3,
+    aggregate/2
+]).
+
+%% Other API
 -export([
-  parse_information/2,
-  find_entries/2,
-  the_alpha_stat/2]).
-
-%% Info API
--export([print/2]).
-
-%% coordinator API
--export([
-  register/3,
-  unregister/5,
-  update/3]).
+    data_sanitise/1,
+    print/1,
+    print/2
+]).
 
 %% API
--export([start_link/0]).
+-export([
+    start_link/0
+]).
 
 %% gen_server callbacks
--export([init/1,
-  handle_call/3,
-  handle_cast/2,
-  handle_info/2,
-  terminate/2,
-  code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
 
 -define(SERVER, ?MODULE).
 -define(PFX, riak_stat:prefix()).
 
--record(state, {
-  statstable,
-  priority = metadata}).
+-record(state, {}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 -spec(get_stats() -> stats()).
-%% @doc get all the stats from riak_admin ets table @end
+%% @doc
+%% get all the stats from metadata (if enabled) or exometer, like
+%% "riak-admin stat show riak.**"
+%% @end
 get_stats() ->
-  gen_server:call(?SERVER, get_stats).
+    {_N, MatchSpec, _DPs} = data_sanitise([?PFX ++ "**"], '_', '_'),
+    gen_server:call(?SERVER, {get_stats, MatchSpec}).
 
--spec(priority() -> priority()).
-%% @doc return the priority thats save in the riak_admin state @end
-priority() ->
-  gen_server:call(?SERVER, priority).
+%%% ------------------------------------------------------------------
 
-%TODO -spec / :: () -> .
+-spec(get_stat(stats()) -> statlist()).
+%% @doc
+%% give A Path to a particular stat such as : [riak,riak_kv,node,gets,time]
+%% to retrieve the stat
+%% @end
+get_stat(Path) ->
+    find_entries([Path], '_').
+
+-spec(get_stat_value(data()) -> value()).
+%% @doc
+%% Get the stat(s) value from exometer, only returns enabled values
+%% @end
 get_stat_value(Arg) ->
-  riak_stat_coordinator:get_stat_info(Arg).
+    {Names, _MatchSpec, _DP} = data_sanitise(Arg),
+    Entries = find_entries(Names, '_'),
+    [find_stat_value(Entry) || {Entry, _} <- Entries].
 
-% TODO: -spec / :: () -> .
-aggregate(A, S) ->
-  riak_stat_coordinator:aggregate(A, S).
+%%% ------------------------------------------------------------------
 
--spec(read_stats(app()) -> stats()).
-%% @doc similar to get_stats but specific to the app @end
-read_stats(App) ->
-  parse_information([?PFX, App], '_').
+-spec(get_app_stats(app()) -> stats()).
+%% @doc
+%% similar to get_stats but specific to the app provided in the module
+%% "riak-admin stat show riak.<app>.**"
+%% @end
+get_app_stats(App) ->
+    {_N, MatchSpec, _DPs} = data_sanitise([?PFX, App, "**"], '_', '_'),
+    gen_server:call(?SERVER, {get_stats, MatchSpec}).
 
--spec(get_stats_status(app()) -> stats()).
-%% @doc find the status of the apps stats from priority() @end
-get_stats_status(App) ->
-  Stats = parse_information([?PFX, App], '_'),
-  lists:foldl(fun(Stat, Acc) ->
-            case riak_stat_coordinator:check_status(Stat) of
-              {error, _R} ->
-                Acc;
-              Stat ->
-                [Stat | Acc]
-            end
-              end, [], Stats).
+-spec(get_stats_values(app()) -> statlist()).
+%% @doc
+%% Get the stats for the app and all their values
+%% @end
+get_stats_values(App) ->
+    AppStats = get_app_stats(App),
+    [find_stat_value(Stat) || {Stat, _Status} <- AppStats].
 
 -spec(get_stats_info(app()) -> stats()).
-%% @doc get the info for the apps stats from exometer @end
+%% @doc
+%% get the info for the apps stats from exometer
+%% @end
 get_stats_info(App) ->
-  Stats = parse_information([?PFX, App], '_'),
-  {Attr, _RestArg} = riak_stat_info:pick_info_attrs(Stats),
-  lists:foldl(fun(Stat, Acc) ->
-    [{Stat, lists:map(fun(At) ->
-      {At, riak_stat_coordinator:get_info(Stat, At)}
-                      end, Attr)} | Acc]
-              end, [], Stats).
+    AppStats = get_app_stats(App),
+    [find_stat_info(Stat) || {Stat, _Status} <- AppStats].
 
--spec(set_priority(value()) -> ok).
-%% @doc set priority exom | exometer | meta | metadata, anything other
-%% than these options defaults the priority to metadata @end
-set_priority(Priority) ->
-  gen_server:call(?SERVER, {priority, Priority}).
+%%% ------------------------------------------------------------------
 
-%%%===================================================================
-%%% Data API
-%%%===================================================================
-
--spec(parse_information(Data :: term(), Status :: atom()) -> term()).
+-spec(register(pfx(), app(), statname()) -> ok | error()).
 %% @doc
-%% Data from riak_core_console and other modules arrive in different
-%% formats than the format needed, they are sent to this function to
-%% be translated into the correct universal format
-%%
-%% i.e. [<<"riak.riak_kv.node.gets.time">>] ->
-%%  [riak,riak_kv,node,gets,time]
-%%
-%% If there is an input like riak.riak_kv.node.** the ".**" will
-%% find any and all stats that follow the first [riak,riak_kv_node]
-%% path with anything after it as well.
-parse_information(Data, Status) ->
-    AList = riak_stat_data:parse_info(Data, Status),
-  [parse_pattern(APat0) || {{APat0, _EPat}, _Stuff} <- AList].
-
-parse_pattern(Pat) ->
-  APat = [{A, '_'} || A <- Pat],
-  gen_server:call(?SERVER, {pattern, APat}).
-
--spec(find_entries(Arg :: term(), Status :: term()) -> term()).
-%% @doc
-%% uses the above function to find the data in exometer
+%% register apps stats into both meta and exometer
 %% @end
-find_entries(Arg, Status) ->
-  Stats = riak_stat_data:find_entries(Arg, Status),
-  [print(Stat, Attr) || {Stat, Attr} <- Stats].
+register(P, App, Stat) ->
+    gen_server:call(?SERVER, {register, P, App, Stat}).
 
-
--spec(the_alpha_stat(Alpha :: list(), Beta :: list()) -> term()).
+-spec(update(statname(), incrvalue(), type()) -> ok | error()).
 %% @doc
-%% In the case where one list should take precedent, which is most
-%% likely the case when registering in both exometer and metadata, the options
-%% hardcoded into the stats may change, or the primary kv for stats statuses
-%% switches, in every case, there must be an alpha.
+%% update a stat in exometer, if the stat doesn't exist it will
+%% re_register it. When the stat is deleted in exometer the status is
+%% changed to unregistered in metadata, it will check the metadata
+%% first, if unregistered then ok is returned by default and no stat
+%% is created.
 %% @end
-the_alpha_stat(Alpha, Beta) ->
-% The keys are sorted first with ukeysort which deletes duplicates, then merged
-% so any key with the same stat name that is both enabled and disabled returns
-% only the enabled option.
-  AlphaList = the_alpha_map(Alpha),
-  BetaList = the_alpha_map(Beta),
-  lists:ukeymerge(2, lists:ukeysort(1, AlphaList), lists:ukeysort(1, BetaList)).
-% The stats must fight, to become the alpha
+update(Name, Inc, Type) ->
+    riak_stat_coordinator:update(Name, Inc, Type).
 
-the_alpha_map(A_B) ->
-    lists:map(fun
-                ({Stat, {Atom, Val}}) -> {Stat, {Atom, Val}};
-                ({Stat, Val})         -> {Stat, {atom, Val}};
-                ([]) -> []
-              end, A_B).
+-spec(unregister(pfx(), app(), Mod :: data(), Idx :: data(), type()) ->
+    ok | error()).
+%% @doc
+%% unregister a stat from the metadata leaves it's status as
+%% {status, unregistered}, and deletes the metric from exometer
+%% @end
+unregister(Pfx, App, Mod, Idx, Type) ->
+    gen_server:call(?SERVER, {unregister, {Pfx, App, Mod, Idx, Type}}).
 
+-spec(aggregate(pattern(), datapoint()) -> statlist()).
+%% @doc
+%% @see exometer:aggregate
+%% Does the average of stats averages
+%% @end
+aggregate(Stats, DPs) ->
+    Pattern = {{Stats, '_', '_'}, [], [Stats]},
+    riak_stat_coordinator:aggregate(Pattern, DPs).
 
 %%%===================================================================
-%%% Info API
-%%%===================================================================
+%%% Other API
+%%%==================================================================
+
+%% @doc
+%% sanitise the data to a form useful for finding the stats in metadata
+%% and in exometer
+%% @end
+data_sanitise(Arg) ->
+    riak_stat_data:data_sanitise(Arg).
+data_sanitise(Data, Type, Status) ->
+    riak_stat_data:data_sanitise(Data, Type, Status).
+
 
 -spec(print(data(), attr()) -> value()).
 print(Arg) ->
     print(Arg, []).
 print(Entries, Attr) when is_list(Entries) ->
-  lists:map(fun(E) -> print(E, Attr) end, Entries);
+    lists:map(fun(E) -> print(E, Attr) end, Entries);
 print(Entries, Attr) ->
     riak_stat_info:print(Entries, Attr).
 
@@ -186,32 +175,24 @@ print(Entries, Attr) ->
 %%% Coordinator API
 %%%===================================================================
 
--spec(register(pfx(), app(), statname()) -> ok | error()).
-%% @doc register apps stats into both meta and exometer @end
-register(P, App, Stat) ->
-  gen_server:call(?SERVER, {register, P, App, Stat}).
+find_entries(Stats, Status) ->
+    riak_stat_coordinator:find_entries(Stats, Status).
 
--spec(unregister(pfx(), app(), Mod :: data(), Idx :: data(), type()) ->
-  ok | error()).
-%% @doc unregister a stat from the metadata leaves it's status as
-%% {status, unregistered}, and deletes the metric from exometer @end
-unregister(Pfx, App, Mod, Idx, Type) ->
-  gen_server:call(?SERVER, {unregister, {Pfx, App, Mod, Idx, Type}}).
+select_entries(MatchSpec) ->
+    riak_stat_coordinator:select(MatchSpec).
 
--spec(update(statname(), incrvalue(), type()) -> ok | error()).
-%% @doc update a stat in exometer, if the stat doesn't exist it will
-%% re_register it. When the stat is deleted in exometer the status is
-%% changed to unregistered in metadata, it will check the metadata
-%% first, if unregistered then ok is returned by default and no stat
-%% is created. @end
-update(Name, Inc, Type) ->
-  riak_stat_coordinator:update(Name, Inc, Type).
+find_stat_value(Path) ->
+    riak_stat_coordinator:find_stats_info(Path, [value]).
+
+find_stat_info(Stat) ->
+    Info = [name, type, module, value, cache, status, timestamp, options],
+    riak_stat_coordinator:find_stats_info(Stat, Info).
 
 %%--------------------------------------------------------------------
 -spec(start_link() ->
-  {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -219,18 +200,10 @@ start_link() ->
 
 %%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
-  {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term()} | ignore).
+    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
+    {stop, Reason :: term()} | ignore).
 init([]) ->
-  StatsTable = ets:new(admin, [
-    set,
-    protected,
-    {keypos, 1},
-    {write_concurrency, true},
-    {read_concurrency, true}
-  ]),
-  %% No heir, so on startup this ets:table is created
-  {ok, #state{statstable = StatsTable}}.
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
@@ -241,98 +214,87 @@ init([]) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
-
-handle_call({register, {P, App, Stats}}, _From, State = #state{statstable = ETS}) ->
-  lists:foreach(fun(Stat) ->
-    register_stat(P, App, Stat, ETS)
-                end, Stats),
-  {reply, ok, State};
+handle_call({get_stats, AllStats}, _From, State) ->
+    {reply, select_entries(AllStats), State};
+handle_call({register, {P, App, Stats}}, _From, State) ->
+    lists:foreach(fun(Stat) ->
+        register_stat(P, App, Stat)
+                  end, Stats),
+    {reply, ok, State};
 handle_call({unregister, Pfx, App, Mod, Idx, Type}, _From, State) ->
-  unreg_stats(Pfx, App, Type, Mod, Idx),
-  {reply, ok, State};
-handle_call(get_stats, _From, State = #state{statstable = Ets}) ->
-  TheStatsList = ets:tab2list(Ets),
-  {reply, TheStatsList, State};
-handle_call({pattern, Pattern}, _From, State = #state{statstable = Ets}) ->
-  Stats =
-    lists:foldl(fun(Pat, Acc) ->
-      [ets:match_object(Ets, Pat) | Acc]
-                end, [], Pattern),
-  {reply, Stats, State};
-handle_call(priority, _From, State = #state{priority = Priority}) ->
-  {reply, Priority, State};
-handle_call({priority, Priority}, _From, State = #state{priority = _Whatev}) ->
-  NewP =
-    case Priority of
-      metadata -> metadata;
-      meta -> metadata;
-      exometer -> exometer;
-      exom -> exometer;
-      _ -> metadata
-    end,
-  {reply, ok, State#state{priority = NewP}};
+    unreg_stats(Pfx, App, Type, Mod, Idx),
+    {reply, ok, State};
 handle_call(_Request, _From, State) ->
-  {reply, ok, State}.
+    {reply, ok, State}.
 
 %%--------------------------------------------------------------------
 -spec(handle_cast(Request :: term(), State :: #state{}) ->
-  {noreply, NewState :: #state{}} |
-  {noreply, NewState :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term(), NewState :: #state{}}).
+    {noreply, NewState :: #state{}} |
+    {noreply, NewState :: #state{}, timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_cast(_Request, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 -spec(handle_info(Info :: timeout() | term(), State :: #state{}) ->
-  {noreply, NewState :: #state{}} |
-  {noreply, NewState :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term(), NewState :: #state{}}).
+    {noreply, NewState :: #state{}} |
+    {noreply, NewState :: #state{}, timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: #state{}}).
 handle_info(_Info, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term()).
+      State :: #state{}) -> term()).
 terminate(_Reason, _State) ->
-  ok.
+    ok.
 
 %%--------------------------------------------------------------------
 -spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
     Extra :: term()) ->
-  {ok, NewState :: #state{}} | {error, Reason :: term()}).
+    {ok, NewState :: #state{}} | {error, Reason :: term()}).
 code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+    {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-register_stat(P, App, Stat, Tab) ->
-  {Name, Type, Opts, Aliases} =
-    case Stat of
-      {N, T} -> {N, T, [], []};
-      {N, T, Os} -> {N, T, Os, []};
-      {N, T, Os, As} -> {N, T, Os, As}
-    end,
-  StatName = stat_name(P, App, Name),
-  ets:insert(Tab, StatName),
-  % Pull out the status of the stat from MetaData
-  riak_stat_coordinator:register({StatName, Type, Opts, Aliases}).
+register_stat(P, App, Stat) ->
+    {Name, Type, Opts, Aliases} =
+        case Stat of
+            {N, T} -> {N, T, [], []};
+            {N, T, Os} -> {N, T, Os, []};
+            {N, T, Os, As} -> {N, T, Os, As}
+        end,
+    StatName = stat_name(P, App, Name),
+    NewOpts = add_cache(Opts),
+    % Pull out the status of the stat from MetaData
+    riak_stat_coordinator:register({StatName, Type, NewOpts, Aliases}).
+
+add_cache(Opts) ->
+  case lists:keyfind(cache, 1, Opts) of
+    false ->
+      lists:keystore(cache, 1, Opts, ?CACHE);
+    _ ->
+      lists:keyreplace(cache, 1, Opts, ?CACHE)
+  end.
 
 % Put the prefix and App name in front of every stat name.
 stat_name(P, App, N) when is_atom(N) ->
-  stat_name_([P, App, N]);
+    stat_name_([P, App, N]);
 stat_name(P, App, N) when is_list(N) ->
-  stat_name_([P, App | N]).
+    stat_name_([P, App | N]).
 
 stat_name_([P, [] | Rest]) -> [P | Rest];
 stat_name_(N) -> N.
 
-unreg_stats(P, App, Type, [Op, time], Index) ->
-  unreg_from_both([P, App, Type, Op, time, Index]);
-unreg_stats(P, App, Type, Mod, Index) ->
-  unreg_from_both([P, App, Type, Mod, Index]).
 
-unreg_from_both(StatName) ->
-  riak_stat_coordinator:unregister(StatName).
+unreg_stats(P, App, Type, [Op, time], Index) ->
+    unreg_stats_([P, App, Type, Op, time, Index]);
+unreg_stats(P, App, Type, Mod, Index) ->
+    unreg_stats_([P, App, Type, Mod, Index]).
+
+unreg_stats_(StatName) ->
+    riak_stat_coordinator:unregister(StatName).
