@@ -32,13 +32,13 @@ start_link() ->
 
 -spec(terminate(Children :: list() | term()) ->
     ok | {error, Reason :: any()}).
+%% @doc for emergency purposes @end %% and testing
 terminate(Children) when is_list(Children) ->
     lists:foreach(fun(Child) ->
         supervisor:terminate(?SUPERVISOR, Child)
                   end, Children);
 terminate(Child) ->
     supervisor:terminate(?SUPERVISOR, Child).
-
 
 %% ===================================================================
 %% Supervisor callbacks
