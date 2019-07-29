@@ -174,8 +174,6 @@ zip_disabled(DPs) ->
     [{D, disabled, N} || {D, N} <- DPs].
 
 
-
-
 %%%----------------------------------------------------------------%%%
 
 -spec(find_static_stats(stats()) -> status()).
@@ -418,5 +416,3 @@ reset_exom_stat(Arg) ->
 
 update_exom(Name, IncrBy, Type) ->
     riak_stat_exometer:update_or_create(Name, IncrBy, Type).
-
-%%% ------------------------------------------------------------------

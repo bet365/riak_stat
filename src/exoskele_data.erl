@@ -85,14 +85,7 @@ sanitise_data_([<<"instance=", I/binary>> | Rest], Protocol, Port, _Instance, Si
     NewInstance = binary_to_list(I),
     sanitise_data_(Rest, Protocol, Port, NewInstance, Sip);
 sanitise_data_([<<"sip=", S/binary>> | Rest], Protocol, Port, Instance, Sip) ->
-    NumList = re:split(S, "\\.", [{return, list}]),
-    NewIP =
-        case list_to_tuple(NumList) of
-            IP when length(NumList) < 5 ->
-                IP;
-            {error, _Reason} -> Sip;
-            _Else -> Sip
-        end,
+    NewIP = re:split(S, "\\s", [{return, list}]),
     sanitise_data_(Rest, Protocol, Port, Instance, NewIP);
 sanitise_data_([], Protocol, Port, Instance, Sip) ->
     {Protocol, Port, Instance, Sip}.

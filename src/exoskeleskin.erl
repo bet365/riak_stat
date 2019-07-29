@@ -8,7 +8,9 @@
 -include("exoskeleskin.hrl").
 
 %% Setup and Setdown
--export([setup/1,
+-export([
+    get_host/1,
+    setup/1,
     disable_port/1
 ]).
 
@@ -18,37 +20,45 @@
     disable/2,
     change_port/1,
     restart/1,
-    restart/2,
-    get_host/0
+    restart/2
 ]).
 
+-spec(get_host(atom()) -> term()).
+%% @doc
+%% ETS table acts as a permanent state as the gen_servers are temporary,
+%% data is pulled out of state as a last known request
+%% @end
+get_host(Info) ->
+    case ets:lookup(?EXOSKELETABLE, Info) of
+        [{_, {MonitorServer, undefined, MonitorPort, Socket}}] ->
+            {Socket, MonitorServer, MonitorPort};
+        [{_, {_MonitorServer, MonitorServerIp, MonitorPort, Socket}}] ->
+            {Socket, MonitorServerIp, MonitorPort};
+        [] ->
+            {error, no_info}
+    end.
+
+-spec(setup(term()) -> ok).
+%% @doc
+%% Set up a gen_server for udp or a gen_server to handle requests from
+%% webmachine
+%% @end
 setup(Arg) ->
-    {Protocol, Port, Instance, Sip} = sanitise_data(Arg),
-    Proto = re:split([<<"exoskele_">>|[Protocol]], "\\."),
-    Name = binary_to_atom(Proto, latin1),
-    exoskele_sup:start_server(Name, {Port, Instance, Sip}).
+    exoskele_console:setup(Arg).
 
-sanitise_data(Data) ->
-    exoskele_data:sanitise_data(Data).
-
-%%fresh_map() ->
-%%    Map = maps:new(),
-%%    MapVals = [
-%%        {protocol,[]},
-%%        {socket,0},
-%%        {latency_port,?MONITOR_LATENCY_PORT},
-%%        {port,?MONITOR_STATS_PORT},
-%%        {instance,?INSTANCE},
-%%        {server_ip,undefined},
-%%        {server,?MONITOR_SERVER},
-%%        {hostname,inet_db:gethostname()}],
-%%    lists:foldl(fun({Key, Value}, Macc) ->
-%%        maps:put(Key, Value, Macc)
-%%              end, Map, MapVals).
+-spec(disable_port(term()) -> term()).
+%% @doc
+%% remove the servers currently running and pushing stats to an endpoint,
+%% removes communication between wm and client
+%% @end
+disable_port(Arg) ->
+    exoskele_console:setdown(Arg).
 
 
-disable_port(Port) ->
-    ok.
+
+
+
+
 
 enable(udp, Por) ->
     Port = exoskelestats:parse_data(Por),
@@ -160,17 +170,4 @@ restart(Arg)->
     {Type, Port} = exoskelestats:parse_arg(Arg),
     restart(Type, Port).
 
-get_host() ->
-    case ets:lookup(exoskeleskin_state, udp_socket) of
-        [{_, {MonitorServer, undefined, MonitorPort, Socket}}] ->
-            {Socket, MonitorServer, MonitorPort};
-        [{_, {_MonitorServer, MonitorServerIp, MonitorPort, Socket}}] ->
-            {Socket, MonitorServerIp, MonitorPort};
-        [] ->
-            {error, no_udp_socket}
-    end.
 
-get_http() ->
-    case ets:lookup(exoskeleskin_state, http_socket) of
-        ok -> ok
-    end.

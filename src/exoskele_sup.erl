@@ -13,6 +13,7 @@
 %% API
 -export([
     start_link/0,
+    what_kids/0,
     start_server/2,
     stop_server/1
 ]).
@@ -35,6 +36,9 @@
 
 start_link() ->
     supervisor:start_link({global, ?MODULE}, ?MODULE, []).
+
+what_kids() ->
+    supervisor:which_children(?SUPERVISOR).
 
 %%%-------------------------------------------------------------------
 %%% @doc

@@ -59,7 +59,7 @@
 %% @end
 -spec(notify(jsonprops()) -> ok).
 notify(JsonProps) when is_list(JsonProps) ->
-    DateTime = exoskelestats:format_time(os:timestamp()),
+    DateTime = exoskele_data:format_time(os:timestamp()),
     try
           case get_host() of
               {Socket, Host, Port} ->
@@ -101,7 +101,6 @@ notify(ServiceId, CorrelationId, JsonProps) ->
     lager:error("Unknown format ServiceId=~p, CorrelationId=~p, JsonProps=~p~n",
         [ServiceId, CorrelationId, JsonProps]).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the server
@@ -132,7 +131,6 @@ start_link(Port) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init(Port) ->
-
     MonitorLatencyPort =
         case Port of
             [] -> ?MONITOR_LATENCY_PORT;
@@ -152,10 +150,7 @@ init(Port) ->
         {udp_socket, {MonitorServer, undefined, MonitorLatencyPort, Socket}}),
 
     self() ! refresh_monitor_server_ip,
-    case ?SEND_TO_UDP of
-        true -> erlang:send_after(?STATS_UPDATE_INTERVAL, self(), update_stats);
-        false -> ok
-    end,
+    erlang:send_after(?STATS_UPDATE_INTERVAL, self(), update_stats),
 
     {ok, #state{
         socket        = Socket,
@@ -270,7 +265,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 dispatch_stats(Socket, ComponentHostname, Instance, MonitoringHostname, Port) ->
-    Metrics = riak_stat_coordinator:get_stats(['_']),
+    Metrics = get_stats(),
     case exoskele_js:metrics_to_json(Metrics,
         [{instance, Instance},{hostname, ComponentHostname}], ?EXCLUDED_DATAPOINTS) of
         [] ->
@@ -282,7 +277,10 @@ dispatch_stats(Socket, ComponentHostname, Instance, MonitoringHostname, Port) ->
     erlang:send_after(?STATS_UPDATE_INTERVAL, self(), update_stats).
 
 get_host() ->
-    exoskeleskin:get_host().
+    exoskeleskin:get_host(udp_info).
 
 build_data_packet(Props, DateTime) ->
     [${, exoskele_js:format_fields([{timestamp, DateTime}|Props], []), $}].
+
+get_stats() ->
+    riak_stat_coordinator:find_stats_info(['_'], [value]).
