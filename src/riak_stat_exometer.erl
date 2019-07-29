@@ -5,106 +5,161 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(riak_stat_exometer).
+-include("riak_stat.hrl").
 
 %% API
 -export([
-  register_stat/4,
-  alias/1,
-  aliases/2,
-  re_register/2,
-  read_stats/1,
-  get_datapoint/2,
-  get_value/1,
-  get_values/1,
-  select_stat/1,
-  info/2,
-  aggregate/2,
-  update_or_create/3,
-  update_or_create/4,
-  change_status/1,
-  set_opts/2,
-  unregister_stat/1,
-  reset_stat/1]).
-
-%% caching API
--export([
-  read_cache/2,
-  write_to_cache/4,
-  delete_cache/2]).
+    find_entries/2,
+    find_static_stats/1,
+    find_stats_info/2,
+    register_stat/4,
+    alias/1,
+    aliases/2,
+    re_register/2,
+    read_stats/1,
+    get_datapoint/2,
+    get_value/1,
+    get_values/1,
+    select_stat/1,
+    info/2,
+    aggregate/2,
+    update_or_create/3,
+    update_or_create/4,
+    change_status/1,
+    set_opts/2,
+    unregister_stat/1,
+    reset_stat/1
+]).
 
 %% Secondary API
--export([timestamp/0]).
+-export([
+    timestamp/0
+]).
 
 %% additional API
--export([start/0, stop/0]).
+-export([
+    start/0,
+    stop/0
+]).
 
 -define(PFX, riak_stat:prefix()).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+-spec(find_entries(stats(), status()) -> statlist()).
+%% @doc
+%% Use @see exometer:find_entries to get the name, type and status of
+%% a stat given, fo all the stats that match the Status given put into
+%% a list to be returned
+%% @end
+find_entries(Stats, Status) ->
+    lists:map(fun(Stat) ->
+                  case find_entries(Stat) of
+                      [{Name, _Type, EStatus}] when EStatus == Status; Status == '_' ->
+                          {Name, Status};
+                      [{_Name, _Type, _EStatus}] -> % Different status
+                          [];
+                      [] ->
+                          []
+                  end
+              end, Stats).
+
+-spec(find_static_stats(stats()) -> statlist()).
+%% @doc
+%% Find all the enabled stats in exometer with the value 0 or [] and
+%% put into a list
+%% @end
+find_static_stats(Stats) when is_list(Stats) ->
+  lists:map(fun(Stat) ->
+                  case get_values(Stat) of
+                      [] ->
+                          [];
+                      List ->
+                          lists:foldl(fun
+                                        ({Name, 0}, Acc) ->
+                                            [{Name, 0} | Acc];
+                                        ({Name, []}, Acc) ->
+                                            [{Name, 0} | Acc];
+                                        ({Name, _V}, Acc) ->
+                                            Acc
+                                       end, [], List)
+                  end
+            end, Stats).
+
+-spec(find_stats_info(stats(), datapoint()) -> statlist()).
+%% @doc
+%% Find the stats and the info for that stat
+%% @end
+find_stats_info(Stats, Info) when is_atom(Info) ->
+  find_stats_info(Stats, [Info]);
+find_stats_info(Stats, Info) when is_list(Info) ->
+  lists:map(fun(Stat) ->
+    [{Stat, [{DP, get_datapoint(Stat, DP)} || DP <- Info]}]
+            end, Stats).
+
 
 %%%%%%%%%%%%%% CREATING %%%%%%%%%%%%%%
 
 -spec(register_stat(statname(), type(), options(), aliases()) ->
-  ok | error()).
+    ok | error()).
 %% @doc
-%% Registers all stats, using exometer:re_register/3, any stat that is
+%% Registers all stats, using  exometer:re_register/3, any stat that is
 %% re_registered overwrites the previous entry, works the same as
 %% exometer:new/3 except it wont return an error if the stat already
 %% is registered.
 %% @end
 register_stat(StatName, Type, Opts, Aliases) ->
-  lists:foreach(
-    fun({DP, Alias}) ->
-      aliases(new, [Alias, StatName, DP]) %% returns -> ok | {error, Reason}
-    end, Aliases),
-  re_register(StatName, Type, Opts). %% returns -> ok.
+    lists:foreach(
+        fun({DP, Alias}) ->
+            aliases(new, [Alias, StatName, DP]) %% returns -> ok | {error, Reason}
+        end, Aliases),
+    re_register(StatName, Type, Opts). %% returns -> ok.
 
 re_register(StatName, Type) ->
-  re_register(StatName, Type, []).
-
+    re_register(StatName, Type, []).
 re_register(StatName, Type, Opts) ->
-  exometer:re_register(StatName, Type, Opts).
-
+    exometer:re_register(StatName, Type, Opts).
 
 -spec(alias(Group :: term()) -> ok | acc()).
 alias(Group) ->
-  lists:keysort(
-    1,
-    lists:foldl(
-      fun({K, DPs}, Acc) ->
-        case get_datapoint(K, [D || {D,_} <- DPs]) of
-          {ok, Vs} when is_list(Vs) ->
-            lists:foldr(fun({D,V}, Acc1) ->
-              {_,N} = lists:keyfind(D,1,DPs),
-              [{N,V}|Acc1]
-                        end, Acc, Vs);
-          Other ->
-            Val = case Other of
-                    {ok, disabled} -> undefined;
-                    _ -> 0
-                  end,
-            lists:foldr(fun({_,N}, Acc1) ->
-              [{N,Val}|Acc1]
-                        end, Acc, DPs)
-        end
-      end, [], orddict:to_list(Group))).
+    lists:keysort(
+      1,
+      lists:foldl(
+        fun({K, DPs}, Acc) ->
+          case get_datapoint(K, [D || {D,_} <- DPs]) of
+            {ok, Vs} when is_list(Vs) ->
+              lists:foldr(fun({D,V}, Acc1) ->
+                {_,N} = lists:keyfind(D,1,DPs),
+                [{N,V}|Acc1]
+                          end, Acc, Vs);
+            Other ->
+              Val = case Other of
+                      {ok, disabled} -> undefined;
+                      _ -> 0
+                    end,
+              lists:foldr(fun({_,N}, Acc1) ->
+                [{N,Val}|Acc1]
+                          end, Acc, DPs)
+          end
+        end, [], orddict:to_list(Group))).
 
 -spec(aliases(type(), list()) -> ok | acc() | error()).
 %% @doc
 %% goes to exometer_alias and performs the type of alias function specified
 %% @end
 aliases(new, [Alias, StatName, DP]) ->
-  exometer_alias:new(Alias, StatName, DP);
+    exometer_alias:new(Alias, StatName, DP);
 aliases(prefix_foldl, []) ->
-  exometer_alias:prefix_foldl(<<>>, alias_fun(), orddict:new());
+    exometer_alias:prefix_foldl(<<>>, alias_fun(), orddict:new());
 aliases(regexp_foldr, [N]) ->
-  exometer_alias:regexp_foldr(N, alias_fun(), orddict:new()).
+    exometer_alias:regexp_foldr(N, alias_fun(), orddict:new()).
 
 alias_fun() ->
-  fun(Alias, Entry, DP, Acc) ->
-    orddict:append(Entry, {DP, Alias}, Acc)
-  end.
-
-aggregate(A, S) ->
-  exometer:aggregate(A, S).
+    fun(Alias, Entry, DP, Acc) ->
+      orddict:append(Entry, {DP, Alias}, Acc)
+    end.
 
 %%%%%%%%%%%%%% READING %%%%%%%%%%%%%%
 
@@ -114,16 +169,15 @@ aggregate(A, S) ->
 %% exometer functions.
 %% @end
 read_stats(App) ->
-  Values = get_values([?PFX, App]),
-  [Name  || {Name, _V} <- Values].
+    Values = get_values([?PFX, App]),
+    [Name  || {Name, _V} <- Values].
 
 -spec(get_datapoint(statname(), datapoint()) -> exo_value() | error()).
 %% @doc
 %% Retrieves the datapoint value from exometer
 %% @end
 get_datapoint(Name, Datapoint) ->
-%%  exometer:get_value(Name, Datapoint).
-  exometer:get_value(Name, Datapoint).
+    exometer:get_value(Name, Datapoint).
 
 -spec(get_value(statname()) -> exo_value() | error()).
 %% @doc
@@ -131,7 +185,7 @@ get_datapoint(Name, Datapoint) ->
 %% 'default' is inputted, however it is used by some modules
 %% @end
 get_value(S) ->
-  exometer:get_value(S).
+    exometer:get_value(S).
 
 -spec(get_values(any()) -> exo_value() | error()).
 %% @doc
@@ -140,36 +194,97 @@ get_value(S) ->
 %% in their path. and uses exometer:find_entries and above function
 %% @end
 get_values(Path) ->
-  exometer:get_values(Path).
+    exometer:get_values(Path).
 
 -spec(select_stat(pattern()) -> value()).
 %% @doc
 %% Find the stat in exometer using this pattern
 %% @end
 select_stat(Pattern) ->
-  exometer:select(Pattern).
+    exometer:select(Pattern).
+
+-spec(find_entries(stats()) -> statlist()).
+%% @doc
+%% @see exometer:find_entries
+%% @end
+find_entries(Stat) ->
+  exometer:find_entries(Stat).
 
 -spec(info(statname(), info()) -> value()).
 %% @doc
 %% find information about a stat on a specific item
 %% @end
 info(Name, Type) ->
-  exometer:info(Name, Type).
+    exometer:info(Name, Type).
+
+-spec(aggregate(pattern(), datapoint()) -> statlist()).
+%% @doc
+%% "Aggregate data points of matching entries"
+%% for example: in riak_kv_stat:stats() ->
+%%
+%% aggregate({{['_',actor_count], '_', '_'},[],[true]}], [max])
+%%
+%% aggregates the max of the:
+%% [counter,actor_count],
+%% [set,actor_count] and
+%% [map,actor_count]
+%% By adding them together.
+%% .
+%% @end
+aggregate(Pattern, Datapoints) ->
+  Entries = metric_names(Pattern),
+  Num = length(Entries),
+  {AvgDP, OtherDP} = aggregate_average(Datapoints),
+  AggrAvgs = do_aggregate(Pattern, AvgDP),
+  OtherAggs = do_aggregate(Pattern, OtherDP),
+  Averaged = do_average(Num, AggrAvgs),
+  io:fwrite("Aggregation of : ~n"),
+  [io:fwrite("~p  ", [Name]) || Name <- Entries],
+  io:fwrite("~n~p~n~p~n", [Averaged, OtherAggs]).
+
+do_aggregate(_Pattern, []) ->
+  [];
+do_aggregate(Pattern, DataPoints) ->
+  lists:map(fun(DP) ->
+    {DP, exometer:aggregate(Pattern, DP)}
+            end, DataPoints).
+
+%% @doc In case the aggregation is for the average of certain values @end
+aggregate_average(DataPoints) ->
+  lists:foldl(fun(DP, {Avg, Other}) ->
+    {agg_avg(DP, Other, Avg), lists:delete(DP, Other)}
+        end, {[], DataPoints}, [one, mean, median, 95, 99, 100, max]).
+
+agg_avg(DP, DataPoints, AvgAcc) ->
+  case lists:member(DP, DataPoints) of
+    true ->
+      [DP | AvgAcc];
+    false ->
+      AvgAcc
+  end.
+
+do_average(Num, DataValues)  ->
+  lists:map(fun({DP, Values}) ->
+    {DP, {aggregated, Values}, {average, Values/Num}}
+            end, DataValues).
+
+metric_names(Pattern) ->
+  [Name || {Name, _Type, _Status} <- select_stat(Pattern)].
 
 %%%%%%%%%%%%%% UPDATING %%%%%%%%%%%%%%
 
 -spec(update_or_create(statname(), value(), type()) ->
-  ok | error()).
+    ok | error()).
 %% @doc
 %% Sends the stat to exometer to get updated, unless it is not already a stat then it
 %% will be created. First it is checked in meta_mgr and registered there.
 %% @end
 update_or_create(Name, UpdateVal, Type) ->
-  update_or_create(Name, UpdateVal, Type, []).
+    update_or_create(Name, UpdateVal, Type, []).
 -spec(update_or_create(Name :: list() | atom(), UpdateVal :: any(), Type :: atom() | term(), Opts :: list()) ->
-  ok | term()).
+    ok | term()).
 update_or_create(Name, UpdateVal, Type, Opts) ->
-  exometer:update_or_create(Name, UpdateVal, Type, Opts).
+    exometer:update_or_create(Name, UpdateVal, Type, Opts).
 
 -spec(change_status(Stats :: list() | term()) ->
   ok | term()).
@@ -177,14 +292,14 @@ update_or_create(Name, UpdateVal, Type, Opts) ->
 %% enable or disable the stats in the list
 %% @end
 change_status(Stats) when is_list(Stats) ->
-  lists:map(fun
-              ({Stat, {status, Status}}) -> change_status(Stat, Status);
-              ({Stat, Status}) ->           change_status(Stat, Status)
-            end, Stats);
+    lists:map(fun
+                ({Stat, {status, Status}}) -> change_status(Stat, Status);
+                ({Stat, Status}) ->           change_status(Stat, Status)
+              end, Stats);
 change_status({Stat, Status}) ->
-  change_status(Stat, Status).
+    change_status(Stat, Status).
 change_status(Stat, Status) ->
-  set_opts(Stat, [{status, Status}]).
+    set_opts(Stat, [{status, Status}]).
 
 
 -spec(set_opts(statname(), options()) -> ok | error()).
@@ -193,7 +308,7 @@ change_status(Stat, Status) ->
 %% disabled in it's options in exometer will change its status in the entry
 %% @end
 set_opts(StatName, Opts) ->
-  exometer:setopts(StatName, Opts).
+    exometer:setopts(StatName, Opts).
 
 %%%%%%%%%%%%% UNREGISTER / RESET %%%%%%%%%%%%%%
 
@@ -202,41 +317,24 @@ set_opts(StatName, Opts) ->
 %% deletes the stat entry from exometer
 %% @end
 unregister_stat(StatName) ->
-  exometer:delete(StatName).
+    exometer:delete(StatName).
 
 -spec(reset_stat(statname()) -> ok | error()).
 %% @doc
 %% resets the stat in exometer
 %% @end
 reset_stat(StatName) ->
-  exometer:reset(StatName).
+    exometer:reset(StatName).
 
-
-
-
-
-%%%%%%%%%%%%% CACHING %%%%%%%%%%%%%% <- unused
-
--spec(read_cache(statname(), datapoint()) -> not_found | {ok, value()}).
-read_cache(Name, DP) ->
-  exometer_cache:read(Name, DP).
-
--spec(write_to_cache(statname(), datapoint(), value(), ttl()) -> ok).
-write_to_cache(Name, DP, Value, TTL) ->
-  exometer_cache:write(Name, DP, Value, TTL).
-
--spec(delete_cache(statname(), datapoint()) -> ok).
-delete_cache(Name, DP) ->
-  exometer_cache:delete(Name, DP), ok.
 
 %%%%%%%%%%%% Helper Functions %%%%%%%%%%%
 
--spec(timestamp() -> timestamp()). %% TODO: move to exo_stat
+-spec(timestamp() -> timestamp()).
 %% @doc
 %% Returns the timestamp to put in the stat entry
 %% @end
 timestamp() ->
-  exometer_util:timestamp().
+    exometer_util:timestamp().
 
 %%%%%%%%%%%% Extras %%%%%%%%%%%%%%%
 
@@ -244,8 +342,8 @@ timestamp() ->
 %% Used in testing in certain modules
 %% @end
 start() ->
-  exometer:start().
+    exometer:start().
 
 stop() ->
-  exometer:stop().
+    exometer:stop().
 
