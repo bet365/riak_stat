@@ -3,6 +3,20 @@
 %%% riak_stat_metadata is the middle-man for riak_stat and
 %%% riak_core_metadata. All information that needs to go into or out
 %%% of the metadata will always go through this module.
+%%%
+%%% Profile Prefix: {profiles, list}
+%%% Loaded Prefix:  {profiles, loaded}
+%%% Stats Prefix:   {stats, nodeid()}
+%%%
+%%% Profile metadata-pkey: {{profiles, list}, [<<"profile-name">>]}
+%%% Profile metadata-val : [{Stat, {status, Status},...]
+%%%
+%%% Loaded metadata-pkey : {{profile, loaded}, [<<"profile-key">>]}
+%%% Loaded metadata-val  : [<<"profile-name">>]
+%%%
+%%% Stats metadata-pkey: {{stats, nodeid()}, [riak,riak_kv,...]}
+%%% Stats metadata-val : {enabled, spiral, [{resets,...},{vclock,...}], [Aliases]}
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(riak_stat_metadata).
