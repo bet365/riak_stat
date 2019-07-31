@@ -18,11 +18,10 @@
     get_app_stats/1,
     get_stats_values/1,
     get_stats_info/1,
-
+    aggregate/2,
     register/3,
     unregister/5,
-    update/3,
-    aggregate/2
+    update/3
 ]).
 
 %% Other API
@@ -63,7 +62,7 @@
 %% @end
 get_stats() ->
     {_N, MatchSpec, _DPs} = data_sanitise([?PFX ++ "**"], '_', '_'),
-    gen_server:call(?SERVER, {get_stats, MatchSpec}).
+    print(gen_server:call(?SERVER, {get_stats, MatchSpec})).
 
 %%% ------------------------------------------------------------------
 
@@ -73,7 +72,7 @@ get_stats() ->
 %% to retrieve the stat
 %% @end
 get_stat(Path) ->
-    find_entries([Path], '_').
+    print(find_entries([Path], '_')).
 
 -spec(get_stat_value(data()) -> value()).
 %% @doc
@@ -82,7 +81,7 @@ get_stat(Path) ->
 get_stat_value(Arg) ->
     {Names, _MatchSpec, _DP} = data_sanitise(Arg),
     Entries = find_entries(Names, '_'),
-    [find_stat_value(Entry) || {Entry, _} <- Entries].
+    print([find_stat_value(Entry) || {Entry, _} <- Entries]).
 
 %%% ------------------------------------------------------------------
 
@@ -93,7 +92,7 @@ get_stat_value(Arg) ->
 %% @end
 get_app_stats(App) ->
     {_N, MatchSpec, _DPs} = data_sanitise([?PFX, App, "**"], '_', '_'),
-    gen_server:call(?SERVER, {get_stats, MatchSpec}).
+    print(gen_server:call(?SERVER, {get_stats, MatchSpec})).
 
 -spec(get_stats_values(app()) -> statlist()).
 %% @doc
@@ -101,7 +100,7 @@ get_app_stats(App) ->
 %% @end
 get_stats_values(App) ->
     AppStats = get_app_stats(App),
-    [find_stat_value(Stat) || {Stat, _Status} <- AppStats].
+    print([find_stat_value(Stat) || {Stat, _Status} <- AppStats]).
 
 -spec(get_stats_info(app()) -> stats()).
 %% @doc
@@ -109,7 +108,19 @@ get_stats_values(App) ->
 %% @end
 get_stats_info(App) ->
     AppStats = get_app_stats(App),
-    [find_stat_info(Stat) || {Stat, _Status} <- AppStats].
+    print([find_stat_info(Stat) || {Stat, _Status} <- AppStats]).
+
+%%% ------------------------------------------------------------------
+
+-spec(aggregate(pattern(), datapoint()) -> statlist()).
+%% @doc
+%% @see exometer:aggregate
+%% Does the average of stats averages
+%% @end
+aggregate(Stats, DPs) ->
+    Pattern = {{Stats, '_', '_'}, [], [Stats]},
+    AggStats = riak_stat_coordinator:aggregate(Pattern, DPs),
+    print(AggStats).
 
 %%% ------------------------------------------------------------------
 
@@ -120,16 +131,21 @@ get_stats_info(App) ->
 register(P, App, Stat) ->
     gen_server:call(?SERVER, {register, P, App, Stat}).
 
--spec(update(statname(), incrvalue(), type()) -> ok | error()).
-%% @doc
-%% update a stat in exometer, if the stat doesn't exist it will
-%% re_register it. When the stat is deleted in exometer the status is
-%% changed to unregistered in metadata, it will check the metadata
-%% first, if unregistered then ok is returned by default and no stat
-%% is created.
-%% @end
-update(Name, Inc, Type) ->
-    riak_stat_coordinator:update(Name, Inc, Type).
+%%-spec(update(statname(), incrvalue(), type()) -> ok | error()).
+%%%% @doc
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%% Moved so update calls straight to coordinator to avoid this gen_server %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%% update a stat in exometer, if the stat doesn't exist it will
+%%%% re_register it. When the stat is deleted in exometer the status is
+%%%% changed to unregistered in metadata, it will check the metadata
+%%%% first, if unregistered then ok is returned by default and no stat
+%%%% is created.
+%%%% @end
+%%update(Name, Inc, Type) ->
+%%    riak_stat_coordinator:update(Name, Inc, Type).
+
+
 
 -spec(unregister(pfx(), app(), Mod :: data(), Idx :: data(), type()) ->
     ok | error()).
@@ -140,14 +156,6 @@ update(Name, Inc, Type) ->
 unregister(Pfx, App, Mod, Idx, Type) ->
     gen_server:call(?SERVER, {unregister, {Pfx, App, Mod, Idx, Type}}).
 
--spec(aggregate(pattern(), datapoint()) -> statlist()).
-%% @doc
-%% @see exometer:aggregate
-%% Does the average of stats averages
-%% @end
-aggregate(Stats, DPs) ->
-    Pattern = {{Stats, '_', '_'}, [], [Stats]},
-    riak_stat_coordinator:aggregate(Pattern, DPs).
 
 %%%===================================================================
 %%% Other API

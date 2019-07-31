@@ -49,7 +49,7 @@
 %% Show enabled or disabled stats
 %% when using riak-admin stat show riak.** enabled stats will show by default
 %%
-%% otherwise use: riak-admin stat show-enabled | show-disabled
+%% otherwise use: riak-admin stat show <entry>/status=* | disabled
 %% @end
 show_stat(Arg) ->
     {_S, MatchSpec, DP} = data_sanitise(Arg),

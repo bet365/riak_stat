@@ -15,6 +15,14 @@
 %% set up fixtures for updating a stat constantly,
 %% set up fixtures for updating from multiple nodes at once.
 
+%% Test whether it is quicker to pull a list of all stats and their statuses
+%% out of exometer or metadata, if similar, how much more expensive Is it to
+%% check if the metadata is enabled first.
+%% Test whether it is quicker to do legacy search for a request or for it to
+%% check in metadata or in exometer, set them in order of quickest.
+%% Test aggregation of the stats
+
+
 %% TODO END
 
 -define(setup(Fun),        {setup, fun setup/0, fun cleanup/1, Fun}).
