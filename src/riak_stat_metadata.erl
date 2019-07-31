@@ -203,7 +203,17 @@ the_alpha_stat(Alpha, Beta) ->
 % only the enabled option, where it is enabled in the alpha.
     AlphaList = the_alpha_map(Alpha),
     BetaList = the_alpha_map(Beta),
-    lists:ukeymerge(2, lists:ukeysort(1, AlphaList), lists:ukeysort(1, BetaList)).
+    {_Nout, ListtoChange} =
+        lists:foldr(fun(Stat, {List1, List2}) ->
+            case lists:member(Stat, List1) of
+                true ->
+                    {List1, List2};
+                false ->
+                    {List1, [Stat | List2]}
+            end
+                    end, {BetaList, []}, AlphaList),
+    ListtoChange.
+%%    lists:ukeymerge(2, lists:ukeysort(1, AlphaList), lists:ukeysort(1, BetaList)).
 % The stats must fight, to become the alpha
 
 the_alpha_map(A_B) ->
@@ -212,6 +222,7 @@ the_alpha_map(A_B) ->
                   ({Stat, Val})         -> {Stat, {atom, Val}};
                   ([]) -> []
               end, A_B).
+
 
 change_stat_list_to_status(StatusList) ->
     riak_stat_coordinator:change_status(StatusList).
