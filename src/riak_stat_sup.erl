@@ -3,8 +3,8 @@
 %% riak_stat_admin is started first, it has riak_stat_console that depends
 %% on it for parsing information. riak_stat_profile is started last as it
 %% has nothing to depend on it and it depends on no one. it's death affects
-%% nothing, it is affected by both the death of riak_stat_admin and
-%% riak_stat_console however.
+%% nothing, however, it is affected by both the death of riak_stat_admin and
+%% riak_stat_console.
 %% @end
 %%--------------------------------------------------------------------
 -module(riak_stat_sup).
