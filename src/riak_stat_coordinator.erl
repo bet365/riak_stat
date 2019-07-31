@@ -37,6 +37,7 @@
 
 %% Metadata API
 -export([
+    reload_metadata/1,
     check_status/1
 ]).
 
@@ -344,6 +345,10 @@ aggregate(P, DP) ->
 %%%===================================================================
 %%% Metadata API
 %%%===================================================================
+
+reload_metadata(Stats) ->
+    change_meta_status(Stats).
+
 
 maybe_meta(Fun, Args) ->
     case ?IS_ENABLED(?META_ENABLED) of
