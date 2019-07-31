@@ -284,3 +284,34 @@ build_data_packet(Props, DateTime) ->
 
 get_stats() ->
     riak_stat_coordinator:find_stats_info(['_'], [value]).
+
+
+-ifdef(TEST).
+
+-include_lib("eunit/include/eunit.hrl").
+
+build_data_packet_test() ->
+    DateTime = exoskele_data:format_time({1429,703171,905719}),
+    ?assertEqual("{\"timestamp\":\"2015-04-22T11:46:11.905Z\",\"service_id\":\"test\",\"correlation_id\":\"document_1\"}",
+        lists:flatten(build_data_packet([{service_id, "test"}, {correlation_id, document_1}], DateTime))),
+
+    ?assertEqual("{\"timestamp\":\"2015-04-22T11:46:11.905Z\",\"service_id\":\"test\",\"correlation_id\":\"document_1\",\"wibble\":1}",
+        lists:flatten(build_data_packet([{service_id, "test"}, {correlation_id, document_1}|[{wibble, 1}]], DateTime))),
+
+    ?assertEqual("{\"timestamp\":\"2015-04-22T11:46:11.905Z\",\"service_id\":\"test\",\"correlation_id\":\"document_1\",\"wobble\":[\"hello\",\"world\"],\"wibble\":1}",
+        lists:flatten(build_data_packet([{service_id, "test"}, {correlation_id, document_1},{wobble, [<<"hello">>, <<"world">>]}|[{wibble, 1}]], DateTime))),
+
+    ?assertEqual("{\"timestamp\":\"2015-04-22T11:46:11.905Z\",\"service_id\":\"test\",\"correlation_id\":\"document_1\"}",
+        lists:flatten(build_data_packet([{service_id, "test"}, {correlation_id, "document_1"}], DateTime))),
+
+    ?assertEqual("{\"timestamp\":\"2015-04-22T11:46:11.905Z\",\"service_id\":\"test\",\"correlation_id\":\"document_1\"}",
+        lists:flatten(build_data_packet([{service_id, <<"test">>}, {correlation_id, <<"document_1">>}], DateTime))),
+
+    ?assertEqual("{\"timestamp\":\"2015-04-22T11:46:11.905Z\",\"service_id\":1,\"correlation_id\":2}",
+        lists:flatten(build_data_packet([{service_id, 1}, {correlation_id, 2}], DateTime))).
+
+build_stats_test() ->
+    JsonStats = exo_metrics_formatter:metrics_to_json([{[wibble, wobble], [{95, 23}, {n, 290}]}], [], []),
+    ?debugFmt("~s", [JsonStats]).
+
+-endif.

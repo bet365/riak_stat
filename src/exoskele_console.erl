@@ -11,7 +11,17 @@
     setdown/1
 ]).
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+start_http() ->
+  Dispatch = cowboy_router:compile([
+    {'_', [{"/stats/",      exo_stats_handler, []}]}
+  ]),
 
+  {ok, _} = cowboy:start_http(exo_http_listener, 100, [{host, {0,0,0,0}}, {port, ?STATS_LISTEN_PORT}],
+    [{env, [{dispatch, Dispatch}]}]
+  ).
 
 
 
