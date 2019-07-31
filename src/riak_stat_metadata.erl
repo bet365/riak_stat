@@ -123,7 +123,9 @@ delete(Prefix, Key) ->
     riak_core_metadata:delete(Prefix, Key).
 
 select(MatchSpec) ->
-    select(?STATPFX, MatchSpec).
+    NewSpec = [{{Name, {Status, Type, '_','_'}, Guard, Output}} ||
+        {{Name, Type, Status}, Guard, Output} <- MatchSpec],
+    select(?STATPFX, NewSpec).
 -spec(select(metadata_prefix(), pattern()) -> metadata_value()).
 %% @doc
 %% use the ets:select in the metadata to pull the value wanted from the metadata
@@ -149,7 +151,7 @@ replace(Prefix, MatchSpec) ->
 find_entries(Stats, Status) ->
     lists:map(fun(Stat) ->
         select(?STATPFX,
-            [{{Stat, {'$2','_','_','_'}}, {'==', '$2', Status},{Stat, '$2'}}])
+            [{{Stat, {'$2','_','_','_'}}, [{'==', '$2', Status}],{Stat, '$2'}}])
               end, Stats).
 
 
