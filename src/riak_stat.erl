@@ -325,7 +325,7 @@ enable_metadata(Arg) ->
         Bool when Bool == true; Bool == false ->
             case Bool of
                 true ->
-                    riak_stat_coordinator:reload_metadata(),
+                    riak_stat_coordinator:reload_metadata(get_stats()),
                     set_env(?META_ENABLED, Bool);
                 false ->
                     set_env(?META_ENABLED, Bool)
