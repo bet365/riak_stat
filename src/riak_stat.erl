@@ -3,6 +3,7 @@
 %%% Top module of the riak_stat app.
 %%% Most of the _stat modules in riak will call directly into this module
 %%% to perform specific requests through riak_admin.
+%%% todo: Add more docs to the functions front wiki docs
 %%% @end
 %%%-------------------------------------------------------------------
 -module(riak_stat).
@@ -67,7 +68,7 @@
 
 -spec(show_stat_status(data()) -> ok | print()).
 %% @doc
-%% A call of riak-admin stat show-enabled | show-disabled <entry>
+%% A call of riak-admin stat show <entry>
 %% points to this function, it will by default go to metadata unless it
 %% is changed to exometer with set_default(Def)...
 %% It just returns a status or statuses of the entry or entries
@@ -277,7 +278,7 @@ register(App, Stats) ->
 %% update the stat
 %% @end
 update(Name, IncrBy, Type) ->
-    riak_stat_admin:update(Name, IncrBy, Type).
+    riak_stat_coordinator:update(Name, IncrBy, Type).
 
 -spec(unregister(data()) -> ok | print()).
 %% @doc
@@ -322,7 +323,13 @@ enable_metadata(Arg) ->
         Truth ->
             io:fwrite("Metadata-enabled already set to ~s~n", [Arg]);
         Bool when Bool == true; Bool == false ->
-            set_env(?META_ENABLED, Bool);
+            case Bool of
+                true ->
+                    riak_stat_coordinator:reload_metadata(),
+                    set_env(?META_ENABLED, Bool);
+                false ->
+                    set_env(?META_ENABLED, Bool)
+            end;
         _ ->
             io:fwrite("Wrong argument entered: ~p~n", [_])
     end.
