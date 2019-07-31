@@ -11,7 +11,7 @@
 %%% Profile metadata-pkey: {{profiles, list}, [<<"profile-name">>]}
 %%% Profile metadata-val : [{Stat, {status, Status},...]
 %%%
-%%% Loaded metadata-pkey : {{profile, loaded}, [<<"profile-key">>]}
+%%% Loaded metadata-pkey : {{profile, loaded}, nodeid()}
 %%% Loaded metadata-val  : [<<"profile-name">>]
 %%%
 %%% Stats metadata-pkey: {{stats, nodeid()}, [riak,riak_kv,...]}
@@ -78,7 +78,7 @@
 %%      Profiles are Globally shared
 -define(PROFILEKEY(Profile),  {?PROFPFX, Profile}).
 -define(LOADEDPFX,            {?PROF, loaded}).
--define(LOADEDKEY,             "profile-key").
+-define(LOADEDKEY,             ?NODEID).
 -define(LOADEDPKEY,           {?LOADEDPFX, ?LOADEDKEY}).
 
 %%%===================================================================
