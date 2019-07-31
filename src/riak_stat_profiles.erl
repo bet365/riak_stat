@@ -20,7 +20,7 @@
 %%%
 %%% reset-profile ->
 %%%     unloads the current profile and changes all the stats back to
-%%%     enabled, no entry needed
+%%%     enabled, no entry needed.
 %%%
 %%% pull_profiles() ->
 %%%     Pulls the list of all the profiles saved in the metadata and
@@ -64,20 +64,25 @@
 ]).
 
 -define(SERVER, ?MODULE).
--define(TIME, vclock:fresh()).
 -define(timestamp, os:timestamp()).
 -define(NODEID, riak_core_nodeid:get()).
 
 -record(state, {
     profile = none, %% currently loaded profile
-    profilelist     %% tableId
+    profilelist     %% tableId for profile ETS table
 }).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-%% The data doesn't need to get transformed in profiles, it is only used as a
-%% key, and not as a reference for anything else.
+%% -------------------------------------------------------------------
+%% @doc
+%% Profile names come in "as is" from riak_core_metadata, that is in
+%% the format [<<"profile-name">>], meaning that saving a profile in riak
+%% attach will work for any format as a name, as it is just the key, but
+%% it cannot be loaded from console unless the format is of the same form
+%% @end
+%% -------------------------------------------------------------------
 
 
 -spec(save_profile(profilename()) -> response()).
@@ -148,7 +153,11 @@ init([]) ->
       ]),
     Loaded = last_loaded_profile(),
     ets:insert(Tid, Profiles),
-    gen_server:call(?SERVER, {load, Loaded})
+    case Loaded of %% load last profile that was loaded
+        [<<"none">>] -> [];
+        _ -> gen_server:call(?SERVER, {load, Loaded})
+    end,
+
     {ok, #state{profilelist = Tid}}.
 
 %%--------------------------------------------------------------------
