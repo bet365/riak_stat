@@ -251,7 +251,7 @@ dispatch_stats(Socket, ComponentHostname, Instance, MonitoringHostname, Port, St
             ok = send(Socket, MonitoringHostname, Port, JsonStats)
     end,
 
-    erlang:send_after(?STATS_UPDATE_INTERVAL, self(), dispatch_stats).
+    erlang:send_after(?STATS_UPDATE_INTERVAL, self(), {dispatch_stats, Stats}).
 
 get_host() ->
     exoskeleskin:get_host(udp_info).
