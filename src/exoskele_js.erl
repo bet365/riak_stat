@@ -28,7 +28,7 @@ metrics_to_json(Metrics, AdditionalFields, ExcludedDataPoints) ->
         [] ->
             [];
         _ ->
-            DateTime = exoskele_data:format_time(os:timestamp()),
+            DateTime = format_time(),
             [${, format_fields(AdditionalFields, []), $,, quote("timestamp"), $:, quote(DateTime), $,, JsonStats, $}, "\n"]
     end.
 
@@ -42,7 +42,7 @@ metrics_to_json(Metrics, ExcludedDataPoints) ->
         [] ->
             [];
         _ ->
-            DateTime = exoskele_data:format_time(os:timestamp()),
+            DateTime = format_time(),
             [${, quote("timestamp"), $:, quote(DateTime), $,, JsonStats, $}, "\n"]
     end.
 
@@ -187,3 +187,10 @@ metric_to_binary([Final]) ->
     metric_elem_to_binary(Final);
 metric_to_binary([H | T]) ->
     <<(metric_elem_to_binary(H))/binary, $., (metric_to_binary(T))/binary >>.
+
+%%%===================================================================
+%%% helper functions
+%%%===================================================================
+
+format_time() ->
+    exoskele_data:format_time(os:timestamp()).
