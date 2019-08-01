@@ -26,9 +26,9 @@ start_http() ->
 
 
 setup(Arg) ->
-    {Protocol, Port, Instance, Sip} = sanitise_data(Arg),
+    {{Protocol, Port, Instance, Sip}, Stats} = sanitise_data(Arg),
     Name = protocol_name(Protocol),
-    start_server(Name, {Port, Instance, Sip}).
+    start_server(Name, {{Port, Instance, Sip}, Stats}).
 
 sanitise_data(Arg) ->
     exoskele_data:sanitise_data(Arg).
@@ -53,11 +53,3 @@ get_child() ->
 
 terminate_server(Child) ->
     exoskele_sup:terminate(Child).
-
-
-get_stats_and_values() ->
-  Stats = riak_stat_admin:get_stats(),
-  [{Stat, riak_stat_coordinator:find_stats_info(Stat, [value])} ||
-    {Stat, _Status} <- Stats].
-
-;
