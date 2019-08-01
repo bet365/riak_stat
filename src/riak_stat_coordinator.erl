@@ -48,7 +48,8 @@
     select/1,
     alias/1,
     aliases/1,
-    aliases/2
+    aliases/2,
+    get_values/1
 ]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -421,3 +422,13 @@ reset_exom_stat(Arg) ->
 
 update_exom(Name, IncrBy, Type) ->
     riak_stat_exometer:update_or_create(Name, IncrBy, Type).
+
+%%%===================================================================
+%%% Exoskeleskin API
+%%%===================================================================
+
+get_values(Arg) ->
+    {Stats, _MS, _DPS} = riak_stat_admin:data_sanitise(Arg),
+    lists:map(fun(Path) ->
+        riak_stat_exometer:get_values(Path)
+              end, Stats).
