@@ -1,9 +1,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Information taken from exoskeleton,
-%%% Send Json object over udp to latency monitoring server
-%%%
-%%% Gen_server is started to open a socket and keep it alive.
+%%% Data given from Exoskeleskin through console/config, passed
+%%% into this gen_server to open a udp socket on a Port. Values from
+%%% Exometer are retrieved and sent as a Json object to a latency monitoring
+%%% server
 %%% @end
 %%%-------------------------------------------------------------------
 -module(exoskele_udp).
@@ -37,18 +37,15 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-    socket        :: inet:socket(),
-    server        :: inet:ip4_address(),
-    latency_port  :: inet:port_number(),
-    server_ip     :: inet:ip4_address(),
-    stats_port    :: inet:port_number(),
-    hostname      :: inet:hostname(),
-    instance      :: string()
+    socket        :: socket(),
+    server        :: server(),
+    latency_port  :: latency_port(),
+    server_ip     :: server_ip(),
+    stats_port    :: stats_port(),
+    hostname      :: hostname(),
+    instance      :: instance()
 }).
 
--type serviceid()       :: string() | binary().
--type correlationid()   :: string() | binary().
--type jsonprops()       :: [{atom(), any()}].
 
 %%%===================================================================
 %%% API
@@ -59,12 +56,12 @@
 %% @end
 -spec(notify(jsonprops()) -> ok).
 notify(JsonProps) when is_list(JsonProps) ->
-    DateTime = exoskele_data:format_time(os:timestamp()),
+    DateTime = format_time(),
     try
           case get_host() of
               {Socket, Host, Port} ->
                   Data = build_data_packet(JsonProps, DateTime),
-                  gen_udp:send(Socket, Host, Port, Data);
+                  send(Socket, Host, Port, Data);
               {error, no_udp_socket} ->
                   lager:error("No UDP socket for sending latency"),
                   ok
@@ -101,11 +98,7 @@ notify(ServiceId, CorrelationId, JsonProps) ->
     lager:error("Unknown format ServiceId=~p, CorrelationId=~p, JsonProps=~p~n",
         [ServiceId, CorrelationId, JsonProps]).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @end
+
 %%--------------------------------------------------------------------
 -spec(start_link(Arg :: term()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
@@ -117,56 +110,31 @@ start_link(Port) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
-%% @end
-%%--------------------------------------------------------------------
 -spec(init(Args :: term()) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init(Port) ->
-    MonitorLatencyPort =
-        case Port of
-            [] -> ?MONITOR_LATENCY_PORT;
-            _ -> Port
-        end,
-    MonitorServer = ?MONITOR_SERVER,
+init({{MonitorLatencyPort, Instance, Sip}, Stats}) ->
+
+    MonitorServer      = ?MONITOR_SERVER,
     MonitorStatsPort   = ?MONITOR_STATS_PORT,
     Hostname           = inet_db:gethostname(),
-    Instance           = ?INSTANCE,
+    Socket             = open(),
 
-    {ok, Socket} = gen_udp:open(0, [
-        {buffer, 100*1024*1024},
-        {sndbuff, 5*1024*1024},
-        {active, false}]),
-
-    ets:insert(exoskeleskin_state,
-        {udp_socket, {MonitorServer, undefined, MonitorLatencyPort, Socket}}),
+    ets_insert({MonitorServer, Sip, MonitorLatencyPort, Socket}),
 
     self() ! refresh_monitor_server_ip,
-    erlang:send_after(?STATS_UPDATE_INTERVAL, self(), update_stats),
+    send_after(?STATS_UPDATE_INTERVAL, {dispatch_stats, Stats}),
 
     {ok, #state{
         socket        = Socket,
         latency_port  = MonitorLatencyPort,
         server        = MonitorServer,
+        server_ip     = Sip,
         stats_port    = MonitorStatsPort,
         hostname      = Hostname,
         instance      = Instance}
     }.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @end
 %%--------------------------------------------------------------------
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
@@ -193,39 +161,30 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
-%% @end
+
 %%--------------------------------------------------------------------
 -spec(handle_info(Info :: timeout() | term(), State :: #state{}) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-
-handle_info(update_stats, #state{socket=Socket, stats_port = Port, server_ip = undefined, server = Server, hostname = Hostname, instance = Instance} = State) ->
-    dispatch_stats(Socket, Hostname, Instance, Server, Port),
-    {noreply, State};
-handle_info(update_stats, #state{socket=Socket, stats_port = Port, server_ip = ServerIp, hostname = Hostname, instance = Instance} = State) ->
-    dispatch_stats(Socket, Hostname, Instance, ServerIp, Port),
-    {noreply, State};
 handle_info(refresh_monitor_server_ip, State = #state{socket = Socket, latency_port = LatencyMonitorPort, server = MonitorServer}) ->
-    RefreshInterval = ?REFRESH_INTERVAL,
-    State1= case inet:gethostbyname(MonitorServer) of
+    NewState = case inet:gethostbyname(MonitorServer) of
                 {ok,{hostent,_Hostname,_,_,_, [MonitorServerIp]}} ->
-                    true = ets:insert(exoskeleskin_state, {udp_socket, {MonitorServer, MonitorServerIp, LatencyMonitorPort, Socket}}),
+                    true = ets_insert({MonitorServer, MonitorServerIp, LatencyMonitorPort, Socket}),
                     State#state{server_ip = MonitorServerIp};
                 Other ->
-                    lager:warning("Unable to refresh ip address of monitor server due to ~p, retrying in ~p ms~n", [Other, RefreshInterval]),
+                    lager:warning("Unable to refresh ip address of monitor server due to ~p, retrying in ~p ms~n", [Other, ?REFRESH_INTERVAL]),
                     State
             end,
-    erlang:send_after(RefreshInterval, self(), refresh_monitor_server_ip),
-    {noreply, State1};
+    send_after(?REFRESH_INTERVAL, refresh_monitor_server_ip),
+    {noreply, NewState};
+handle_info({dispatch_stats, Stats}, #state{socket=Socket, stats_port = Port, server_ip = undefined, server = Server, hostname = Hostname, instance = Instance} = State) ->
+    dispatch_stats(Socket, Hostname, Instance, Server, Port, Stats),
+    {noreply, State};
+handle_info({dispatch_stats, Stats}, #state{socket=Socket, stats_port = Port, server_ip = ServerIp, hostname = Hostname, instance = Instance} = State) ->
+    dispatch_stats(Socket, Hostname, Instance, ServerIp, Port, Stats),
+    {noreply, State};
+
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -264,17 +223,35 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-dispatch_stats(Socket, ComponentHostname, Instance, MonitoringHostname, Port) ->
-    Metrics = get_stats(),
+format_time() ->
+    exoskele_data:format_time(os:timestamp()).
+
+send(Socket, Host, Port, Data) ->
+    gen_udp:send(Socket, Host, Port, Data).
+
+send_after(Interval, Arg) ->
+    erlang:send_after(Interval, self(), Arg).
+
+open() ->
+    {ok, Socket} =
+        gen_udp:open(?UDP_OPEN_PORT,
+            [?UDP_OPEN_BUFFER, ?UDP_OPEN_SNDBUFF, ?UDP_OPEN_ACTIVE]),
+    Socket.
+
+ets_insert(Arg) ->
+    ets:insert(?EXOSKELETABLE, {?UDP_KEY, Arg}).
+
+dispatch_stats(Socket, ComponentHostname, Instance, MonitoringHostname, Port, Stats) ->
+    Metrics = get_stats(Stats),
     case exoskele_js:metrics_to_json(Metrics,
         [{instance, Instance},{hostname, ComponentHostname}], ?EXCLUDED_DATAPOINTS) of
         [] ->
             ok;
         JsonStats ->
-            ok = gen_udp:send(Socket, MonitoringHostname, Port, JsonStats)
+            ok = send(Socket, MonitoringHostname, Port, JsonStats)
     end,
 
-    erlang:send_after(?STATS_UPDATE_INTERVAL, self(), update_stats).
+    erlang:send_after(?STATS_UPDATE_INTERVAL, self(), dispatch_stats).
 
 get_host() ->
     exoskeleskin:get_host(udp_info).
@@ -282,8 +259,9 @@ get_host() ->
 build_data_packet(Props, DateTime) ->
     [${, exoskele_js:format_fields([{timestamp, DateTime}|Props], []), $}].
 
-get_stats() ->
-    riak_stat_coordinator:find_stats_info(['_'], [value]).
+get_stats(Stats) ->
+    riak_stat_coordinator:get_values(Stats).
+
 
 
 -ifdef(TEST).
@@ -311,7 +289,7 @@ build_data_packet_test() ->
         lists:flatten(build_data_packet([{service_id, 1}, {correlation_id, 2}], DateTime))).
 
 build_stats_test() ->
-    JsonStats = exo_metrics_formatter:metrics_to_json([{[wibble, wobble], [{95, 23}, {n, 290}]}], [], []),
+    JsonStats = exoskele_js:metrics_to_json([{[wibble, wobble], [{95, 23}, {n, 290}]}], [], []),
     ?debugFmt("~s", [JsonStats]).
 
 -endif.
