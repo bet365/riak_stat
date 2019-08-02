@@ -57,7 +57,7 @@ start_server(Child, Arg) ->
 setdown() ->
     setdown([]).
 setdown(_Arg) ->
-    terminate_server(get_child()).
+    [terminate_server(ChildId) || {ChildId, _Child, _Type, _Mod} <- get_child()].
 
 get_child() ->
     exoskele_sup:what_kids().
