@@ -3,6 +3,7 @@
 %%% Header File for exoskeleskin - all defaults and config is retrievable
 %%% @end
 %%%-------------------------------------------------------------------
+-include("riak_stat.hrl").
 
 -define(APP, exoskeleskin).
 
@@ -17,8 +18,10 @@
 
 -define(EXCLUDED_DATAPOINTS,   riak_stat_config:get_env(exoskeleskin_excluded_datapoints, [ms_since_reset])).
 -define(STATS_LISTEN_PORT,     riak_stat_config:get_env(stats_listen_port, 9000)).
+
 -define(EXOSKELETABLE,         exoskeleskin_state).
 -define(UDP_KEY,               udp_socket).
+-define(WM_KEY,                http_socket).
 
 -define(STATS_UPDATE_INTERVAL, riak_stat_config:get_env(exoskeleskin_stats_update_interval, 1000)).
 -define(REFRESH_INTERVAL,      riak_stat_config:get_env(exoskeleskin_ip_refresh_interval, 30000)).
@@ -28,8 +31,8 @@
 
 -define(UDP_OPEN_PORT,         0).
 -define(UDP_OPEN_BUFFER,       {buffer, 100*1024*1024}).
--define(UDP_OPEN_SNDBUFF,      {sndbuf, 5*1024*1024}).
--define(UDP_OPEN_ACTIVE,       {active,false}).
+-define(UDP_OPEN_SNDBUFF,      {sndbuf,   5*1024*1024}).
+-define(UDP_OPEN_ACTIVE,       {active,         false}).
 
 
 %% OPTIONAL ENVIRONMENT VARIABLES
@@ -40,7 +43,8 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% types for exoskele_udp
+-type arg()               :: any().
+-type sanitised_data()    :: {{port(), instance(), server_ip()}, stats() | profilename()}.
 
 -type jsonprops()         :: [{atom(), any()}].
 -type serviceid()         :: string() | binary().
@@ -54,12 +58,8 @@
 -type hostname()          :: inet:hostname().
 -type instance()          :: string().
 
-
-
 -type protocol()          :: udp | http.
 
--type sanitised_data()     :: {protocol(), socket(), latency_port(), port(),
-                              instance(), server(), server_ip()}.
--type reason()        :: any().
--type error()         :: {error, reason()}.
+-type reason()            :: any().
+-type error()             :: {error, reason()}.
 
