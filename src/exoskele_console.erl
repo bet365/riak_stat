@@ -84,5 +84,15 @@ get_host(Info) ->
             {error, no_info}
     end.
 
+-spec(get_stats() -> stats()).
+%% @doc
+%% retrieve all the stats out of riak_kv_status
+%% todo: improve the stat collection method
+%% @end
 get_stats() ->
-    riak_stat_coordinator:get_values(['_']).
+    case riak_stat_config:get_env(exoskele_stats_default, classic) of
+        classic ->
+            riak_kv_status:get_stats(web);
+        beta ->
+            riak_stat_coordinator:get_values(['_'])
+    end.
