@@ -6,7 +6,6 @@
 -module(exoskele_sup).
 -behaviour(supervisor).
 -include("exoskeleskin.hrl").
--include("riak_stat.hrl").
 
 %% API
 -export([
