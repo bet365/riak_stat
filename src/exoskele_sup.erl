@@ -1,14 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Setting up a gen_server to push stats to the endpoint provided or
-%%% to retrieve a list of stats in the K=V format
+%%% Setting up a gen_server to push stats to the endpoint provided
 %%% @end
 %%%-------------------------------------------------------------------
 -module(exoskele_sup).
-
 -behaviour(supervisor).
-
 -include("exoskeleskin.hrl").
+-include("riak_stat.hrl").
 
 %% API
 -export([
@@ -27,8 +25,13 @@
 -define(RESTART, temporary).
 -define(SHUTDOWN, 6000).
 -define(TYPE, worker).
--define(CHILD(Name), {Name, {Name, start_link, []}, ?RESTART, ?SHUTDOWN, ?TYPE, [Name]}).
+-define(CHILD(Name),      {Name, {Name, start_link, []},    ?RESTART, ?SHUTDOWN, ?TYPE, [Name]}).
 -define(CHILD(Name, Arg), {Name, {Name, start_link, [Arg]}, ?RESTART, ?SHUTDOWN, ?TYPE, [Name]}).
+
+-type child()       :: supervisor:child() | supervisor:child_id().
+-type children()    :: [child()].
+-type childname()   :: atom().
+-type childarg()    :: {{port(), instance(), server_ip()}, stats()}.
 
 %%%===================================================================
 %%% API functions
@@ -41,11 +44,11 @@ what_kids() ->
     supervisor:which_children(?SUPERVISOR).
 
 %%%-------------------------------------------------------------------
+
+-spec(terminate(children()) -> ok).
 %%% @doc
 %%% Terminate the server(s) that are pushing stats to an endpoint
 %%% @end
-%%%-------------------------------------------------------------------
-
 terminate(Children) when is_list(Children) ->
     lists:foreach(fun(Child) ->
         stop_server(Child)
@@ -55,12 +58,11 @@ stop_server(Mod) ->
     supervisor:terminate_child(?SUPERVISOR, Mod), ok.
 
 %%%-------------------------------------------------------------------
+-spec(start_server(childname(), childarg()) -> ok).
 %%% @doc
 %%% Start up a udp or http gen_server to get stats from exometer and
 %%% send to an endpoint given.
 %%% @end
-%%%-------------------------------------------------------------------
-
 start_server(Name, Arg) ->
     Ref = ?CHILD(Name, Arg),
     case supervisor:start_child(?SUPERVISOR, Ref) of
@@ -89,10 +91,4 @@ init([]) ->
     MaxSecondsBetweenRestarts = 3600,
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-
     {ok, {SupFlags, []}}.
-
-
-
-
-
