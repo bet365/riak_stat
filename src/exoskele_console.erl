@@ -13,7 +13,8 @@
     setup/1,
     setdown/0,
     setdown/1,
-    get_host/1
+    get_host/1,
+    get_stats/0
 ]).
 
 -type hostarg()     :: atom().
@@ -82,3 +83,6 @@ get_host(Info) ->
         [] ->
             {error, no_info}
     end.
+
+get_stats() ->
+    riak_stat_coordinator:get_values(['_']).
