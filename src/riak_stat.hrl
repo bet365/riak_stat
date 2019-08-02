@@ -29,7 +29,6 @@
 -type datapoint()     :: info() | list() | integer().
 -type opt_tup()       :: {atom(), any()}.
 -type options()       :: list() | opt_tup().
--type statlist()      :: list().
 -type acc()           :: any().
 
 -type app()           :: atom().
