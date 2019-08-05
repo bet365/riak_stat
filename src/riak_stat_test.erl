@@ -6,7 +6,7 @@
 -module(riak_stat_test).
 -include_lib("eunit/include/eunit.hrl").
 -include("exoskeleskin.hrl").
--compile([export_all]).
+%%-compile([export_all]).
 
 -define(setup(Fun),        {setup,    fun setup/0,          fun cleanup/1, Fun}).
 -define(foreach(Fun),      {foreach,  fun setup/0,          fun cleanup/1, Fun}).

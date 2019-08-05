@@ -8,7 +8,6 @@
                   stdlib,
                   lager,
                   exometer_core,
-%%                  riak_core,     % riak_core_metadata
                   webmachine
   ]},
   {mod, { riak_stat_app, []}},
