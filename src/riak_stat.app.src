@@ -8,7 +8,7 @@
                   stdlib,
                   lager,
                   exometer_core,
-                  riak_core,     % riak_core_metadata
+%%                  riak_core,     % riak_core_metadata
                   exoskeleton,
                   webmachine
   ]},
