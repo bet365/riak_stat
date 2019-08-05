@@ -249,7 +249,7 @@ get_value(Arg) ->
 get_app_stats(App) ->
     riak_stat_admin:get_app_stats(App).
 
--spec(get_stats_values(app()) -> statlist()).
+-spec(get_stats_values(app()) -> stats()).
 %% @doc
 %% Get the stats from exometer and their values for that app.
 %% @end
@@ -273,7 +273,7 @@ get_stats_info(App) ->
 register(App, Stats) ->
     riak_stat_admin:register(prefix(), App, Stats).
 
--spec(update(stat(), non_neg_integer(), type()) -> ok | arg()).
+-spec(update(stats(), non_neg_integer(), type()) -> ok | arg()).
 %% @doc
 %% update the stat
 %% @end
@@ -330,8 +330,8 @@ enable_metadata(Arg) ->
                 false ->
                     set_env(?META_ENABLED, Bool)
             end;
-        _ ->
-            io:fwrite("Wrong argument entered: ~p~n", [_])
+        Other ->
+            io:fwrite("Wrong argument entered: ~p~n", [Other])
     end.
 
 

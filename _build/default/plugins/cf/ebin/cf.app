@@ -1,0 +1,10 @@
+{application,cf,
+             [{description,"Terminal colour helper"},
+              {vsn,"0.1.2"},
+              {registered,[]},
+              {applications,[kernel,stdlib]},
+              {env,[]},
+              {modules,[cf]},
+              {contributors,["Heinz N. Gies <heinz@project-fifo.net>"]},
+              {licenses,["MIT"]},
+              {links,[]}]}.

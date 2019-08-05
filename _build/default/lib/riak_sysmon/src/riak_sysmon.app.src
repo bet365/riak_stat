@@ -1,0 +1,10 @@
+{application,riak_sysmon,
+             [{description,"Rate-limiting system_monitor event handler"},
+              {vsn,"2.1.7"},
+              {applications,[kernel,stdlib,sasl]},
+              {registered,[]},
+              {mod,{riak_sysmon_app,[]}},
+              {env,[]},
+              {maintainers,["basho","Heinz N. Gies"]},
+              {licenses,["Apache"]},
+              {links,[{"Github","https://github.com/basho/riak_sysmon"}]}]}.

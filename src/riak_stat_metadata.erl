@@ -21,8 +21,8 @@
 %%%-------------------------------------------------------------------
 -module(riak_stat_metadata).
 
--include_lib("riak_core/include/riak_core_metadata.hrl").
 -include("riak_stat.hrl").
+%%-include_lib("riak_core/include/riak_core_metadata.hrl").
 
 %% Basic API
 -export([
@@ -67,7 +67,6 @@
     get_loaded_profile/0
 ]).
 
--define(PFX, riak_stat:prefix()).
 -define(STAT, stats).
 -define(PROF, profiles).
 -define(NODEID, riak_core_nodeid:get()).
@@ -80,6 +79,16 @@
 -define(LOADEDPFX,            {?PROF, loaded}).
 -define(LOADEDKEY,             ?NODEID).
 -define(LOADEDPKEY,           {?LOADEDPFX, ?LOADEDKEY}).
+
+-type metadata_prefix()     :: {binary() | atom(), binary() | atom()}.
+-type metadata_key()        :: any().
+-type metadata_pkey()       :: {metadata_prefix(), metadata_key()}.
+-type metadata_value()      :: any().
+-type metadata_tombstone()  :: '$deleted'.
+-type metadata_modifier()   :: fun(([metadata_value() | metadata_tombstone()] | undefined) ->
+    metadata_value()).
+-type put_opts()            :: [] | list().
+
 
 %%%===================================================================
 %%% Basic API
@@ -143,7 +152,7 @@ select(Prefix, MatchSpec) ->
 replace(Prefix, MatchSpec) ->
     riak_core_metadata:replace(Prefix, MatchSpec).
 
--spec(find_entries(statlist(), status()) -> stats()).
+-spec(find_entries(stats(), status()) -> stats()).
 %% @doc
 %% Use an ets:select to find the stats in the metadata of the same status as
 %% the one given, default at riak_core_console level - is enabled.

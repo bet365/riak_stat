@@ -52,18 +52,20 @@
     get_values/1
 ]).
 
+-define(DISABLED_META_RESPONSE, io:fwrite("Metadata is Disabled~n")).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% Console API %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--spec(find_entries(statlist(), status()) -> stats()).
+-spec(find_entries(stats(), status()) -> stats()).
 %% @doc
 %% Find the entries in exometer if the metadata is disabled, return
 %% the stat name and its status : {Stat, Status}
 %% @end
 find_entries(Stats, Status) ->
     case maybe_meta(fun find_entries_meta/2, {Stats, Status}) of
-        ?DISABLED_META_RESPONSE ->
+        false ->
             find_entries_exom(Stats, Status);
         Stats ->
             Stats
@@ -87,7 +89,7 @@ find_entries_exom(Stats, Status) ->
             Entries
     end.
 
--spec(legacy_search(stats(), status()) -> statlist()).
+-spec(legacy_search(stats(), status()) -> stats()).
 %% @doc
 %% legacy code to find the stat and its status, in case it isn't
 %% found in metadata/exometer
@@ -194,7 +196,7 @@ find_static_stats(Stats) ->
 
 %%%----------------------------------------------------------------%%%
 
--spec(find_stats_info(stats(), info() | list()) -> statlist()).
+-spec(find_stats_info(stats(), info() | list()) -> stats()).
 %% @doc
 %% find the information of a stat from the information given
 %% @end
@@ -210,7 +212,7 @@ find_stats_info(Stats, Info) ->
 %% @end
 change_status(StatsList) ->
     case maybe_meta(fun change_both_status/1, StatsList) of
-        ?DISABLED_META_RESPONSE ->
+        false  ->
             change_exom_status(StatsList);
         Other ->
             Other
@@ -229,7 +231,7 @@ change_both_status(StatsList) ->
 reset_stat(StatName) ->
     Fun = fun reset_in_both/1,
     case maybe_meta(Fun, StatName) of
-        ?DISABLED_META_RESPONSE ->
+        false ->
             reset_exom_stat(StatName);
         Ans ->
             Ans
@@ -241,7 +243,7 @@ reset_in_both(StatName) ->
 
 select(Arg) ->
     case maybe_meta(fun met_select/1, Arg) of
-        ?DISABLED_META_RESPONSE ->
+        false  ->
             exo_select(Arg);
         Stats ->
             Stats
@@ -289,7 +291,7 @@ get_loaded_profile() ->
 register({Stat, Type, Opts, Aliases} = Arg) ->
     Fun = fun register_in_both/1,
     case maybe_meta(Fun, Arg) of
-        ?DISABLED_META_RESPONSE ->
+        false  ->
             register_in_exometer(Stat, Type, Opts, Aliases);
         Ans ->
             Ans
@@ -310,7 +312,7 @@ register_in_both({Stat, Type, _Opts, Aliases}=StatInfo) ->
 update(Name, Inc, Type) ->
     Fun = fun check_in_meta/1,
     case maybe_meta(Fun, Name) of
-        ?DISABLED_META_RESPONSE ->
+        false  ->
             update_exom(Name, Inc, Type);
         ok -> ok;
         _ -> update_exom(Name, Inc, Type)
@@ -326,7 +328,7 @@ update(Name, Inc, Type) ->
 unregister(StatName) ->
     Fun = fun unregister_in_both/1,
     case maybe_meta(Fun, StatName) of
-        ?DISABLED_META_RESPONSE ->
+        false  ->
             unregister_in_exometer(StatName);
         Ans ->
             Ans
@@ -338,7 +340,7 @@ unregister_in_both(StatName) ->
 
 %%%----------------------------------------------------------------%%%
 
--spec(aggregate(pattern(), datapoint()) -> statlist()).
+-spec(aggregate(pattern(), datapoint()) -> stats()).
 aggregate(P, DP) ->
     riak_stat_exometer:aggregate(P, DP).
 
@@ -362,7 +364,8 @@ maybe_meta(Fun, Args) ->
                 One        -> Fun(One)
             end;
         false ->
-            ?DISABLED_META_RESPONSE
+            ?DISABLED_META_RESPONSE,
+            false
     end.
 
 register_in_metadata(StatInfo) ->

@@ -5,39 +5,23 @@
 %%%-------------------------------------------------------------------
 -module(riak_stat_test).
 -include_lib("eunit/include/eunit.hrl").
+-include("exoskeleskin.hrl").
+-compile([export_all]).
 
-%% metadata
--compile(export_all).
+-define(setup(Fun),        {setup,    fun setup/0,          fun cleanup/1, Fun}).
+-define(foreach(Fun),      {foreach,  fun setup/0,          fun cleanup/1, Fun}).
+-define(setupconsole(Fun), {setup,    fun setup_console/0,  fun cleanup/1, Fun}).
+-define(setupprofile(Fun), {setup,    fun setup_profile/0,  fun cleanup/1, Fun}).
+-define(fullsetup(Fun),    {setup,    fun setup_all/0,      fun cleanup/1, Fun}).
+-define(exoskelesetup(Fun),{setup,    fun setup_exoskele/0, fun cleanup/1, Fun}).
 
-%% TODO START
-
-%% set up fixtures for registering a stat, and then deleting the stat
-%% set up fixtures for updating a stat constantly,
-%% set up fixtures for updating from multiple nodes at once.
-
-%% Test whether it is quicker to pull a list of all stats and their statuses
-%% out of exometer or metadata, if similar, how much more expensive Is it to
-%% check if the metadata is enabled first.
-%% Test whether it is quicker to do legacy search for a request or for it to
-%% check in metadata or in exometer, set them in order of quickest.
-%% Test aggregation of the stats
-
-
-%% TODO END
-
--define(setup(Fun),        {setup, fun setup/0, fun cleanup/1, Fun}).
--define(foreach(Fun),      {foreach, fun setup/0, fun cleanup/1, Fun}).
--define(setupconsole(Fun), {setup, fun setup_console/0, fun cleanup/1, Fun}).
--define(setupprofile(Fun), {setup, fun setup_profile/0, fun cleanup/1, Fun}).
--define(fullsetup(Fun),    {setup, fun setup_all/0, fun cleanup/1, Fun}).
-
--define(spawn(Test),       {spawn, Test}).
+-define(spawn(Test),       {spawn,        Test}).
 -define(timeout(Test),     {timeout, 120, Test}).
--define(inorder(Test),     {inorder, Test}).
--define(inparallel(Test),  {inparallel, Test}).
+-define(inorder(Test),     {inorder,      Test}).
+-define(inparallel(Test),  {inparallel,   Test}).
 
 -define(unload(Module), meck:unload(Module)).
--define(new(Module), meck:new(Module, [passthrough])).
+-define(new(Module),    meck:new(Module, [passthrough])).
 -define(expect(Module, Fun, Val, Funfun), meck:expect(Module, Fun, Val, Funfun)).
 -define(expect(Module, Fun, Funfun), meck:expect(Module, Fun, Funfun)).
 
@@ -51,214 +35,455 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 setup() ->
-  catch(?unload(riak_stat)),
-  catch(?unload(riak_stat_admin)),
-  catch(?unload(riak_stat_data)),
-  catch(?unload(riak_stat_info)),
-  catch(?unload(riak_stat_coordinator)),
-  catch(?unload(riak_stat_exometer)),
-  catch(?unload(riak_stat_metdata)),
-  ?new(riak_stat),
-  ?new(riak_stat_admin),
-  ?new(riak_stat_data),
-  ?new(riak_stat_info),
-  ?new(riak_stat_coordinator),
-  ?new(riak_stat_exometer),
-  ?new(riak_stat_metadata),
+    catch(?unload(riak_stat)),
+    catch(?unload(riak_stat_admin)),
+    catch(?unload(riak_stat_data)),
+    catch(?unload(riak_stat_info)),
+    catch(?unload(riak_stat_coordinator)),
+    catch(?unload(riak_stat_exometer)),
+    catch(?unload(riak_stat_metdata)),
+    ?new(riak_stat),
+    ?new(riak_stat_admin),
+    ?new(riak_stat_data),
+    ?new(riak_stat_info),
+    ?new(riak_stat_coordinator),
+    ?new(riak_stat_exometer),
+    ?new(riak_stat_metadata),
 
-  {ok, Pid} = riak_stat_admin:start_link(),
-  [Pid].
+    {ok, Pid} = riak_stat_admin:start_link(),
+    [Pid | [setup_stats() | setup_exometer()]].
+
+setup_exometer() ->
+    catch(?unload(exometer)),
+    catch(?unload(exometer_cpu)),
+    catch(?unload(exometer_duration)),
+    catch(?unload(exometer_entry)),
+    catch(?unload(exometer_folsom)),
+    catch(?unload(exometer_function)),
+    catch(?unload(exometer_histogram)),
+    catch(?unload(exometer_igor)),
+    catch(?unload(exometer_info)),
+    catch(?unload(exometer_probe)),
+    catch(?unload(exometer_proc)),
+    catch(?unload(exometer_report_lager)),
+    catch(?unload(exometer_report_tty)),
+    catch(?unload(exometer_shallowtree)),
+    catch(?unload(exometer_slide)),
+    catch(?unload(exometer_slot_slide)),
+    catch(?unload(exometer_spiral)),
+    catch(?unload(exometer_uniform)),
+    catch(?unload(exometer_util)),
+    ?new(exometer),
+    ?new(exometer_cpu),
+    ?new(exometer_duration),
+    ?new(exometer_entry),
+    ?new(exometer_folsom),
+    ?new(exometer_function),
+    ?new(exometer_histogram),
+    ?new(exometer_igor),
+    ?new(exometer_info),
+    ?new(exometer_probe),
+    ?new(exometer_proc),
+    ?new(exometer_report_lager),
+    ?new(exometer_report_tty),
+    ?new(exometer_shallowtree),
+    ?new(exometer_slide),
+    ?new(exometer_slot_slide),
+    ?new(exometer_spiral),
+    ?new(exometer_uniform),
+    ?new(exometer_util),
+
+    catch(?unload(exometer_admin)),
+    catch(?unload(exometer_cache)),
+    catch(?unload(exometer_folsom_monitor)),
+    catch(?unload(exometer_report)),
+    ?new(exometer_admin),
+    ?new(exometer_cache),
+    ?new(exometer_folsom_monitor),
+    ?new(exometer_report),
+
+    {ok, APid}  = exometer_admin:start_link(),
+    {ok, CPid}  = exometer_cache:start_link(),
+    {ok, FMPid} = exometer_folsom_monitor:start_link(),
+    {ok, RPid}  = exometer_report:start_link(),
+    [APid,CPid,FMPid,RPid].
+
+setup_metadata() ->
+    catch(?unload(riak_core_metadata)),
+    catch(?unload(riak_core_metadata_manager)),
+    catch(?unload(riak_core_metadata_hashtree)),
+    catch(?unload(riak_core_metadata_exchange_fsm)),
+    catch(?unload(riak_core_metadata_object)),
+    catch(?unload(riak_core_broadcast_handler)),
+    catch(?unload(dvvset)),
+    ?new(riak_core_metadata),
+    ?new(riak_core_metadata_manager),
+    ?new(riak_core_metadata_hashtree),
+    ?new(riak_core_metadata_exchange_fsm),
+    ?new(riak_core_metadata_object),
+    ?new(riak_core_broadcast_handler),
+    ?new(dvvset),
+
+    catch(?unload(riak_core_broadcast)),
+    catch(?unload(riak_core_metadata_manager)),
+    catch(?unload(riak_core_metadata_hashtree)),
+    ?new(riak_core_broadcast),
+    ?new(riak_core_metadata_manager),
+    ?new(riak_core_metadata_hashtree),
+
+    {ok, BPid}  = riak_core_broadcast:start_link(),
+    {ok, HTPid} = riak_core_metadata_hashtree:start_link(),
+    {ok, MPid}  = riak_core_metadata_manager:start_link(),
+    [BPid, HTPid, MPid].
 
 setup_console() ->
-  catch (?unload(riak_stat_console)),
-  ?new(riak_stat_console),
-  {ok, Pid} = riak_stat_console:start_link(),
-  [Pid | setup()].
+    catch (?unload(riak_stat_console)),
+    ?new(riak_stat_console),
+    {ok, Pid} = riak_stat_console:start_link(),
+    [setup_metadata() | [Pid | setup()]].
 
 
 setup_profile() ->
-  catch (?unload(riak_stat_profiles)),
-  ?new(riak_stat_profiles),
-  {ok, Pid} = riak_stat_profiles:start_link(),
-  [Pid | setup()].
+    catch (?unload(riak_stat_profiles)),
+    ?new(riak_stat_profiles),
+    {ok, Pid} = riak_stat_profiles:start_link(),
+    [setup_metadata() | [Pid | setup()]].
+
+
+setup_exoskele() ->
+    catch (?unload(exoskeleskin)),
+    catch (?unload(exoskeles_console)),
+    catch (?unload(exoskele_data)),
+    catch (?unload(exoskele_json)),
+    catch (?unload(exoskele_sup)),
+    catch (?unload(exoskele_wm)),
+    ?new(exoskeleskin),
+    ?new(exoskeles_console),
+    ?new(exoskele_data),
+    ?new(exoskele_json),
+    ?new(exoskele_sup),
+    ?new(exoskele_wm),
+    Arg = {{?MONITOR_LATENCY_PORT, ?INSTANCE, ?MONITOR_SERVER}, ['_']},
+    {ok, Pid} = exoskele_udp:start_link(Arg),
+    [Pid | setup_all()]. %% exoskele depends on riak_stat
+
+setup_stats() ->
+%% use a fake list of stats and register them to know the outcome
+%% @see stats/0.
+    [riak_stat:register(App, Stats) || {App, Stats} <- register_stats()].
+
+
 
 setup_all() ->
-  catch (?unload(riak_stat_console)),
-  ?new(riak_stat_console),
-  {ok, CPid} = riak_stat_console:start_link(),
+    catch (?unload(riak_stat_console)),
+    ?new(riak_stat_console),
+    {ok, CPid} = riak_stat_console:start_link(),
 
-  catch (?unload(riak_stat_profiles)),
-  ?new(riak_stat_profiles),
-  {ok, PPid} = riak_stat_profiles:start_link(),
+    catch (?unload(riak_stat_profiles)),
+    ?new(riak_stat_profiles),
+    {ok, PPid} = riak_stat_profiles:start_link(),
 
-  [PPid, CPid | setup()].
+    [setup_metadata() | [PPid | [CPid | setup()]]].
 
-cleanup(Pid) ->
-  process_flag(trap_exit, true),
-  catch(?unload(riak_stat)),
-  catch(?unload(riak_stat_admin)),
-  catch(?unload(riak_stat_data)),
-  catch(?unload(riak_stat_info)),
-  catch(?unload(riak_stat_coordinator)),
-  catch(?unload(riak_stat_exometer)),
-  catch(?unload(riak_stat_metdata)),
-  catch(?unload(riak_stat_console)),
-  catch(?unload(riak_stat_profiles)),
-  process_flag(trap_exit, false),
-  Children = supervisor:which_children(Pid),
-  lists:foreach(fun({Child, _n, _o, _b}) -> supervisor:terminate_child(Pid, Child) end, Children).
+cleanup(Pids) ->
+    process_flag(trap_exit, true),
+    catch(?unload(riak_stat)),
+    catch(?unload(riak_stat_admin)),
+    catch(?unload(riak_stat_data)),
+    catch(?unload(riak_stat_info)),
+    catch(?unload(riak_stat_coordinator)),
+    catch(?unload(riak_stat_exometer)),
+    catch(?unload(riak_stat_metdata)),
+    catch(?unload(riak_stat_console)),
+    catch(?unload(riak_stat_profiles)),
+    process_flag(trap_exit, false),
+    Children = [supervisor:which_children(Pid) || Pid <- Pids],
+    lists:foreach(fun({Child, _n, _o, _b}) ->
+        [supervisor:terminate_child(Pid, Child) || Pid <- Pids] end, Children).
 
-
-
-%%%%%%%%%%%%%%%%% riak_stat %%%%%%%%%%%%%%%%%%
+cleanup_exoskele(Pids) ->
+    process_flag(trap_exit, true),
+    catch(?unload(exoskele_console)),
+    catch(?unload(exoskele_data)),
+    catch(?unload(exoskele_udp)),
+    catch(?unload(exoskele_wm)),
+    catch(?unload(exoskele_json)),
+    catch(?unload(exoskeleskin)),
+    process_flag(trap_exit, false),
+    cleanup(Pids).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%% TESTS DESCRIPTIONS %%%%%%%%%%%%%
+%%%%%%%%%%%%%% STATS  FUNCTIONS %%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-register_stats_test_() ->
-  ?setuptest("stats from stats modules get registered",
+register_stats() ->
+  lists:map(fun
+              ({[App |Name], Type, Opts, Aliases}) ->
+                  {App, {Name, Type, Opts, Aliases}};
+              ({[App | Name], Type, Opts}) ->
+                  {App, {Name, Type, Opts, []}};
+              ({[App | Name], Type}) ->
+                  {App, {Name, Type, [], []}}
+            end, stats()).
+
+stats() ->
     [
-      {"register a stat that already exists", fun test_re_register/0},
-      {"register a test stat for counter", fun test_count_register/0},
-      {"register a test stat for gauge", fun test_gauge_register/0},
-      {"register a test stat for histogram", fun test_histogram_register/0}
-    ]).
+        {[riak_core,ignored_gossip_total],  counter,  [{status, enabled}],
+                                                                                [{value, ignored_gossip_total}]},
+        {[riak_core,rings_reconciled],      spiral,   [{status, enabled}], [{count, rings_reconciled_total},
+                                                                                 {one, rings_reconciled}]},
+        {[riak_core,ring_creation_size],    counter,  [{status, enabled}], [{value, ring_creation_size}]},
+        {[riak_core,gossip_received],       spiral,   [{status, enabled}], [{one, gossip_received}]},
+        {[riak_core,rejected_handoffs],     counter,  [{status, enabled}], [{value, rejected_handoffs}]},
+        {[riak_core,handoff_timeouts],      counter,  [{status, disabled}],[{value, handoff_timeouts}]},
+        {[riak_core,dropped_vnode_requests],counter,  [{status, disabled}],[{value, dropped_vnode_requests_total}]},
+        {[riak_core,converge_delay],        duration, [{status, disabled}],[{mean, converge_delay_mean},
+                                                                                 {min, converge_delay_min},
+                                                                                 {max, converge_delay_max},
+                                                                                 {last, converge_delay_last}]},
+        {[riak_core,rebalance_delay],       duration, [{status, disabled}],[{min, rebalance_delay_min},
+                                                                                 {max, rebalance_delay_max},
+                                                                                 {mean, rebalance_delay_mean},
+                                                                                 {last, rebalance_delay_last}]},
 
-update_stats_test_() ->
-  ?setuptest("update stats from stats modules manually",
-    [
-      {"update a stat", fun test_update_stat/0},
-      {"update a non-existent stat", fun test_update_non_stat/0},
-      {"updata a stat twice at the same time", fun test_multi_update/0},
-      {"update a stat that is unregistered", fun test_update_unregistered/0}
-    ]).
+        {[common,cpu_stats],                histogram,[{status, disabled},{sample_interval, 5000}],[
+                                                                                 {nprocs, cpu_nprocs},
+                                                                                 {avg1  , cpu_avg1},
+                                                                                 {avg5  , cpu_avg5},
+                                                                                 {avg15 , cpu_avg15}]},
+        {[common,mem_stats],                spiral,   [{status, enabled}], [{total, mem_total},
+                                                                                 {allocated, mem_allocated}]},
+        {[common,memory_stats],             spiral,   [{status, enabled}], [{total         , memory_total},
+                                                                                 {processes     , memory_processes},
+                                                                                 {processes_used, memory_processes_used},
+                                                                                 {system        , memory_system},
+                                                                                 {atom          , memory_atom},
+                                                                                 {atom_used     , memory_atom_used},
+                                                                                 {binary        , memory_binary},
+                                                                                 {code          , memory_code},
+                                                                                 {ets           , memory_ets}]},
 
-unregister_stats_test_() ->
-  ?setuptest("unregistering stats manually",
-    [
-      {"unregister a stat", fun test_unregister_stat/0},
-      {"unregister a non-existent stat", fun test_unregister_non_stat/0},
-      {"unregister a stat twice at the same time", fun test_unregister_multi_stat/0}
-    ]).
+        {[riak_repl,last_report],            gauge,  [{status, enabled}],  []}, % repl only has 5 gagues
+        {[riak_repl,last_client_bytes_sent], gauge,  [{status, enabled}],  []},
+        {[riak_repl,last_client_bytes_recv], gauge,  [{status, enabled}],  []},
+        {[riak_repl,last_server_bytes_sent], gauge,  [{status, disabled}], []},
+        {[riak_repl,last_server_bytes_recv], gauge,  [{status, disabled}], []},
+
+        {[yz_stat,index,latency],        histogram,  [{status, disabled}], [{min,    search_index_latency_min},
+                                                                                 {max,    search_index_latency_max},
+                                                                                 {mean,   search_index_latency_mean},
+                                                                                 {median, search_index_latency_median},
+                                                                                 {95,     search_index_latency_95},
+                                                                                 {99,     search_index_latency_99},
+                                                                                 {999,    search_index_latency_999}]},
+        {[yz_stat,queue,batchsize],    histogram, [{status, disabled}],    [{min,    search_queue_batchsize_min},
+                                                                                 {max,    search_queue_batchsize_max},
+                                                                                 {mean,   search_queue_batchsize_mean},
+                                                                                 {median, search_queue_batchsize_median}]},
+        {[yz_stat,queue,drain,latency],histogram, [{status, disabled}], [{min,    search_queue_drain_latency_min},
+                                                                              {max,    search_queue_drain_latency_max},
+                                                                              {mean,   search_queue_drain_latency_mean},
+                                                                              {median, search_queue_drain_latency_median},
+                                                                              {95,     search_queue_drain_latency_95},
+                                                                              {99,     search_queue_drain_latency_99},
+                                                                              {999,    search_queue_drain_latency_999}]},
+        {[yz_stat,queue,batch,latency],histogram, [{status, enabled}],  [{min,    search_queue_batch_latency_min},
+                                                                              {max,    search_queue_batch_latency_max},
+                                                                              {mean,   search_queue_batch_latency_mean},
+                                                                              {median, search_queue_batch_latency_median},
+                                                                              {95,     search_queue_batch_latency_95},
+                                                                              {99,     search_queue_batch_latency_99},
+                                                                              {999,    search_queue_batch_latency_999}]},
+        {[yz_stat,'query',latency],    histogram, [{status, enabled}],  [{95    , search_query_latency_95},
+                                                                              {99    , search_query_latency_99},
+                                                                              {999   , search_query_latency_999},
+                                                                              {max   , search_query_latency_max},
+                                                                              {median, search_query_latency_median},
+                                                                              {min   , search_query_latency_min},
+                                                                              {mean  , search_query_latency_mean}]},
+
+        {[riak_api,pbc_connects],          spiral, [{status, enabled}], [{one, pbc_connects},
+                                                                              {count, pbc_connects_total}]},
+        {[riak_api,pbc_connects, active],counter,  [{status, enabled}], [{value, pbc_active}]},
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%% ACTUAL TESTS %%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-test_re_register() ->
-%%  "register a stat that already exists",
-  ?_assertEqual(ok, riak_stat:register(riak_core,
-    [{ignored_gossip_total, counter, [], [{value, ignored_gossip_total0}]}])).
-
-test_count_register() ->
-%%  "register a test stat for counter",
-  ?_assert(ok == riak_stat:register(riak_stat,
-    [{test_stat_name, counter, [{status, disabled}], [{one, test_stat_count_one},
-      {count, test_stat_count_count}]}])).
-
-test_gauge_register() ->
-%%  "register a test stat for gauge"
-  ?_assert(ok == riak_stat:register(riak_stat,
-    [{test_stat_name_2, gauge, [], [{value, test_stat_gauge}]}])).
-
-test_histogram_register() ->
-%%  "register a test stat for histogram",
-  ?_assert(ok == riak_stat:register(riak_stat,
-    [{test_stat_name_3, histogram, [], [{value, test_stat_histo},
-      {max, test_stat_histo_max}, {min, test_stat_histo_min}]}])).
 
 
-test_update_stat() ->
-%%  "update a stat"
-  ?_assert().
+        {[riak_kv,vnode, gets],          spiral,     [{status, enabled}], [{one  , vnode_gets},
+                                                                                {count, vnode_gets_total}]},
+        {[riak_kv,vnode, gets, time],    histogram,  [{status, disabled}], [{mean  , vnode_get_fsm_time_mean},
+                                                                                 {median, vnode_get_fsm_time_median},
+                                                                                 {95    , vnode_get_fsm_time_95},
+                                                                                 {99    , vnode_get_fsm_time_99},
+                                                                                 {max   , vnode_get_fsm_time_100}]},
+        {[riak_kv,ignored_gossip_total], counter, [{status, disabled}], [{value, ignored_gossip_total}]},
+        {[riak_kv,vnode, heads],         spiral,  [{status, disabled}], [{one, vnode_heads},
+                                                                              {count, vnode_heads_total}]},
+        {[riak_kv,vnode, heads, time], histogram, [{status, disabled}], [{mean , vnode_head_fsm_time_mean},
+                                                                              {median, vnode_head_fsm_time_median},
+                                                                              {95    , vnode_head_fsm_time_95},
+                                                                              {99    , vnode_head_fsm_time_99},
+                                                                              {max   , vnode_head_fsm_time_100}]},
+        {[riak_kv,vnode, puts],     spiral,  [{status, disabled}], [{one  , vnode_puts},
+                                                                         {count, vnode_puts_total}]},
+        {[riak_kv,vnode, puts, time], histogram, [{status, enabled}], [{mean  , vnode_put_fsm_time_mean},
+                                                                            {median, vnode_put_fsm_time_median},
+                                                                            {95    , vnode_put_fsm_time_95},
+                                                                            {99    , vnode_put_fsm_time_99},
+                                                                            {max   , vnode_put_fsm_time_100}]},
 
-test_update_non_stat() ->
-  ok.
+        {[riak_kv,node, gets],     spiral,  [{status, enabled}], [{one  , node_gets},
+                                                                       {count, node_gets_total}]},
 
-test_multi_update() ->
-  ok.
+        {[riak_kv,node, gets, fsm, active], counter, [{status, enabled}], []},
+        {[riak_kv,node, gets, fsm, errors], spiral,  [{status, enabled}], [{one, node_get_fsm_errors},
+                                                                                {count, node_get_fsm_errors_total}]},
+        {[riak_kv,node, gets, objsize], histogram, [{status, enabled}], [{mean  , node_get_fsm_objsize_mean},
+                                                                              {median, node_get_fsm_objsize_median},
+                                                                              {95    , node_get_fsm_objsize_95},
+                                                                              {99    , node_get_fsm_objsize_99},
+                                                                              {max   , node_get_fsm_objsize_100}]},
+        {[riak_kv,node, gets, read_repairs],     spiral,  [{status, disabled}], [{one, read_repairs},
+                                                                                      {count, read_repairs_total}]},
+        {[riak_kv,node, gets, skipped_read_repairs], spiral, [{status, disabled}], [{one, skipped_read_repairs},
+                                                                                        {count, skipped_read_repairs_total}]},
+        {[riak_kv,node, gets, siblings],     histogram,  [{status, disabled}], [{mean  , node_get_fsm_siblings_mean},
+                                                                                      {median, node_get_fsm_siblings_median},
+                                                                                      {95    , node_get_fsm_siblings_95},
+                                                                                      {99    , node_get_fsm_siblings_99},
+                                                                                      {max   , node_get_fsm_siblings_100}]},
+        {[riak_kv,node, gets, time], histogram, [{status, disabled}], [{mean  , node_get_fsm_time_mean},
+                                                                            {median, node_get_fsm_time_median},
+                                                                            {95    , node_get_fsm_time_95},
+                                                                            {99    , node_get_fsm_time_99},
+                                                                            {max   , node_get_fsm_time_100}]},
+        {[riak_kv,node, gets, counter],     spiral,  [{status, disabled}], [{one  , node_gets_counter},
+                                                                                  {count, node_gets_counter_total}]},
+        {[riak_kv,node, gets, counter, objsize], histogram, [{status, enabled}], [{mean  , node_get_fsm_counter_objsize_mean},
+                                                                                        {median, node_get_fsm_counter_objsize_median},
+                                                                                        {95    , node_get_fsm_counter_objsize_95},
+                                                                                        {99    , node_get_fsm_counter_objsize_99},
+                                                                                        {max   , node_get_fsm_counter_objsize_100}]},
+        {[riak_kv,node, gets, counter, read_repairs],     spiral,  [{status, enabled}], [{one  , read_repairs_counter},
+                                                                                        {count, read_repairs_counter_total}]},
+        {[riak_kv,node, gets, counter, siblings], histogram, [{status, enabled}], [{mean  , node_get_fsm_counter_siblings_mean},
+                                                                                        {median, node_get_fsm_counter_siblings_median},
+                                                                                        {95    , node_get_fsm_counter_siblings_95},
+                                                                                        {99    , node_get_fsm_counter_siblings_99},
+                                                                                        {max   , node_get_fsm_counter_siblings_100}]},
+        {[riak_kv,node, gets, set],     spiral,  [{status, enabled}], [{one  , node_gets_set},
+                                                                            {count, node_gets_set_total}]},
+        {[riak_kv,counter, actor_count],     histogram,  [{status, disabled}], [{mean  , counter_actor_counts_mean},
+                                                                                  {median, counter_actor_counts_median},
+                                                                                  {95    , counter_actor_counts_95},
+                                                                                  {99    , counter_actor_counts_99},
+                                                                                  {max   , counter_actor_counts_100}]},
+        {[riak_kv,set, actor_count],     histogram,  [{status, disabled}], [{mean  , set_actor_counts_mean},
+                                                                                  {median, set_actor_counts_median},
+                                                                                  {95    , set_actor_counts_95},
+                                                                                  {99    , set_actor_counts_99},
+                                                                                  {max   , set_actor_counts_100}]},
+        {[riak_kv,map, actor_count],     histogram,  [{status, disabled}], [{mean  , map_actor_counts_mean},
+                                                                                  {median, map_actor_counts_median},
+                                                                                  {95    , map_actor_counts_95},
+                                                                                  {99    , map_actor_counts_99},
+                                                                                  {max   , map_actor_counts_100}]},
 
-test_update_unregistered() ->
-  ok.
+        {[riak_pipe,pipeline, create], spiral, [{status, enabled}], [{count, pipeline_create_count},
+                                                                          {one, pipeline_create_one}]},
+        {[riak_pipe,pipeline, create, error],     spiral,  [{status, disabled}], [{count, pipeline_create_error_count},
+                                                                                       {one, pipeline_create_error_one}]},
+        {[riak_pipe,pipeline, active],     counter,  [{status, disabled}], [{value, pipeline_active}]}
 
-test_unregister_stat() ->
-  ok.
 
-test_unregister_non_stat() ->
-  ok.
 
-test_unregister_multi_stat() ->
-  ok.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%% HELPER FUNCTIONS %%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ].
 
 
 % % % % % % % % % % % % % % % % % % % % % % %
-%%%%%%%%%%%%% riak_stat_console %%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%% console %%%%%%%%%%%%%%%%%%%
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%% TESTS DESCRIPTIONS %%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-show_stats_test_() ->
-  ?consoletest("riak-admin stat show <entry>",
-    [ {"Show stat that exists", fun test_show_real_stat/0},
-      {"Show stat that doesn't exist", fun test_show_fake_stat/0},
-      {"Show all stats", fun test_show_all_stats/0},
-      {"Show all enabled stats", fun test_show_enabled_stats/0},
-      {"Show all disabled stats", fun test_show_disabled_stats/0}
-    ]).
-
-info_stats_test_() ->
-  ?consoletest("riak-admin stat info <entry>",
-    [
-      {"Show stat info of existing stat", fun test_info_real_stat/0},
-      {"Show stat info of non-existing stat", fun test_info_fake_stat/0},
-      {"Show stat info for all stats", fun test_info_all_stats/0},
-      {"Show stat info for all enabled stats", fun test_info_enabled_stats/0},
-      {"Show stat info for all disabled stats", fun test_info_disabled_stats/0}
-    ]).
-
-show_stats_0_test_() ->
-  ?consoletest("riak-admin stat show-0 <entry>",
-    [
-      {"Show all static stats <entry>", fun test_static_stats/0}
-    ]).
-
-disable_stats_0_test_() ->
-  ?consoletest("riak-admin stat disable-0 <entry>",
-    [
-      {"Disable all static stats", fun test_disable_0/0},
-      {"Disable static stats twice", fun test_disable_0_again/0}
+%% riak-admin stat show <entry>
+stat_show_test_() ->
+    ?consoletest("riak-admin stat show <entry>",
+        [
+            {"stat show *.**",                        fun test_stat_show_star/0},
+            {"stat show riak.**",                     fun test_stat_show_riak_star/0},
+            {"stat show riak.*.node.**",              fun test_stat_show_riak_node_stats/0},
+            {"stat show riak.**/status=disabled",     fun test_stat_show_disabled/0},
+            {"stat show node_gets",                   fun test_stat_show_legacy_search/0},
+            {"stat show riak.riak_kv.node.gets",      fun test_stat_show_node_gets/0},
+            {"stat show *.**/type=duration/mean,max", fun test_stat_show_type_dps/0},
+            {"stat show not_stat",                    fun test_stat_show_not_stat/0}
         ]).
 
-enable_stats_test_() ->
-  ?consoletest("riak-admin stat enable <entry>",
-    [
-      {"Enable stats", fun test_stat_enable/0},
-      {"Enable stats twice", fun test_stat_enable_again/0},
-      {"Enable stats that don't exist", fun test_fake_stat_enable/0}
-    ]).
+stat_show_0_test_() ->
+    ?consoletest("riak-admin stat show-0 <entry>",
+        [
+            {"stat show-0 *.**",                      fun test_stat_show0_star/0},
+            {"stat show-0 riak.**",                   fun test_stat_show0_riak_star/0},
+            {"stat show-0 riak.*.node.**",            fun test_stat_show0_riak_node_stats/0},
+            {"stat show-0 node_gets",                 fun test_stat_show0_legacy_search/0},
+            {"stat show-0 not_stat",                  fun test_stat_show0_not_stat/0}
+        ]).
 
-disable_stats_test_() ->
-  ?consoletest("riak-admin stat disable <entry>",
-    [
-      {"Disable stats", fun test_stat_disable/0},
-      {"Disable stats twice", fun test_stat_disable_again/0},
-      {"Disable stats that don't exist", fun test_fake_stat_disable/0}
-    ]).
+stat_disable_0_test_() ->
+    ?consoletest("riak-admin stat disable-0 <entry>",
+        [
+            {"stat disable-0 riak.**",                fun test_stat_disable0_riak_star/0},
+            {"stat disable-0 riak.*.node.**",         fun test_stat_disable0_riak_node_stats/0},
+            {"stat disable-0 node_gets",              fun test_stat_disable0_legacy_search/0},
+            {"stat disable-0 riak.riak_kv.node.gets", fun test_stat_disable0_node_gets/0},
+            {"stat disable-0 not_stat",               fun test_stat_disable0_not_stat/0}
+        ]).
+
+stat_info_test_() ->
+    ?consoletest("riak-admin stat info <entry>",
+        [
+            {"stat show -module *.**",                fun test_stat_info_star_module/0},
+            {"stat show -options riak.**",            fun test_stat_info_options_riak_star/0},
+            {"stat show riak.*.node.**",              fun test_stat_info_riak_node_stats/0},
+            {"stat show -status riak.**",             fun test_stat_info_status/0},
+            {"stat show -datapoints node_gets",       fun test_stat_info_legacy_search_dps/0},
+            {"stat show riak.riak_kv.node.gets",      fun test_stat_info_node_gets/0},
+            {"stat show -type -value *.**",           fun test_stat_info_type_value/0},
+            {"stat show not_stat",                    fun test_stat_info_not_stat/0}
+        ]).
+
+stat_enable_test_() ->
+    ?consoletest("riak-admin stat enable <entry>",
+        [
+            {"stat enable riak.**",                   fun test_stat_enable_riak_star/0},
+            {"stat enable riak.*.node.**",            fun test_stat_enable_riak_node_stats/0},
+            {"stat enable node_gets",                 fun test_stat_enable_legacy_search/0},
+            {"stat enable riak.riak_kv.node.gets",    fun test_stat_enable_node_gets/0},
+            {"stat enable not_stat",                  fun test_stat_enable_not_stat/0}
+        ]).
+
+stat_disable_test_() ->
+    ?consoletest("riak-admin stat disable <entry>",
+        [
+            {"stat disable riak.**",                  fun test_stat_disable_riak_star/0},
+            {"stat disable riak.*.node.**",           fun test_stat_disable_riak_node_stats/0},
+            {"stat disable node_gets",                fun test_stat_disable_legacy_search/0},
+            {"stat disable riak.riak_kv.node.gets",   fun test_stat_disable_node_gets/0},
+            {"stat disable not_stat",                 fun test_stat_disable_not_stat/0}
+        ]).
 
 reset_stats_test_() ->
-  ?consoletest("riak-admin stat reset <entry>",
-    [
-      {"Reset all stats", fun test_reset_stats/0},
-      {"Reset all stats twice", fun test_reset_stats_again/0},
-      {"Reset stats that don't exist", fun test_fake_stat_reset/0}
-    ]).
+    ?consoletest("riak-admin stat reset <entry>",
+        [
+            {"stat reset riak.**",                    fun test_stat_reset_riak_star/0},
+            {"stat reset riak.*.node.**",             fun test_stat_reset_riak_node_stats/0},
+            {"stat reset node_gets",                  fun test_stat_reset_legacy_search/0},
+            {"stat reset riak.riak_kv.node.gets",     fun test_stat_reset_node_gets/0},
+            {"stat reset not_stat",                   fun test_stat_reset_not_stat/0}
+        ]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%% ACTUAL TESTS %%%%%%%%%%%%%%%%
@@ -266,129 +491,189 @@ reset_stats_test_() ->
 
 %% riak-admin stat show
 
-test_show_real_stat() ->
-  ok.
+test_stat_show_star() ->
+    ok.
 
-test_show_fake_stat() ->
-  ok.
+test_stat_show_riak_star() ->
+    ok.
 
-test_show_all_stats() ->
-  ok.
+test_stat_show_riak_node_stats() ->
+    ok.
 
-test_show_enabled_stats() ->
-  ok.
+test_stat_show_disabled() ->
+    ok.
 
-test_show_disabled_stats() ->
-  ok.
+test_stat_show_legacy_search() ->
+    ok.
 
+test_stat_show_node_gets() ->
+    ok.
 
-%% riak-admin stat info
+test_stat_show_type_dps() ->
+    ok.
 
-test_info_real_stat() ->
-  ok.
-
-test_info_fake_stat() ->
-  ok.
-
-test_info_all_stats() ->
-  ok.
-
-test_info_enabled_stats() ->
-  ok.
-
-test_info_disabled_stats() ->
-  ok.
+test_stat_show_not_stat() ->
+    ok.
 
 
 %% riak-admin stat show-0
 
-test_static_stats() ->
-  ok.
+test_stat_show0_star() ->
+    ok.
+
+test_stat_show0_riak_star() ->
+    ok.
+
+test_stat_show0_riak_node_stats() ->
+    ok.
+
+test_stat_show0_legacy_search() ->
+    ok.
+
+test_stat_show0_not_stat() ->
+    ok.
 
 
 %% riak-admin stat disable-0
 
-test_disable_0() ->
-  ok.
+test_stat_disable0_riak_star() ->
+      ok.
 
-test_disable_0_again() ->
-  ok.
+test_stat_disable0_riak_node_stats() ->
+    ok.
+
+test_stat_disable0_legacy_search() ->
+    ok.
+
+test_stat_disable0_node_gets() ->
+    ok.
+
+test_stat_disable0_not_stat() ->
+    ok.
+
+
+%% riak-admin stat info
+
+test_stat_info_star_module() ->
+    ok.
+
+test_stat_info_options_riak_star() ->
+    ok.
+
+test_stat_info_riak_node_stats() ->
+    ok.
+
+test_stat_info_status() ->
+    ok.
+
+test_stat_info_legacy_search_dps() ->
+    ok.
+
+test_stat_info_node_gets() ->
+    ok.
+
+test_stat_info_type_value() ->
+    ok.
+
+test_stat_info_not_stat() ->
+    ok.
 
 
 %% riak-admin stat enable
 
-test_stat_enable() ->
-  ok.
+test_stat_enable_riak_star() ->
+    ok.
 
-test_stat_enable_again() ->
-  ok.
+test_stat_enable_riak_node_stats() ->
+    ok.
 
-test_fake_stat_enable() ->
-  ok.
+test_stat_enable_legacy_search() ->
+    ok.
+
+test_stat_enable_node_gets() ->
+    ok.
+
+test_stat_enable_not_stat() ->
+    ok.
 
 
 %% riak-admin stat disable
 
-test_stat_disable() ->
-  ok.
+test_stat_disable_riak_star() ->
+    ok.
 
-test_stat_disable_again() ->
-  ok.
+test_stat_disable_riak_node_stats() ->
+    ok.
 
-test_fake_stat_disable() ->
-  ok.
+test_stat_disable_legacy_search() ->
+    ok.
+
+test_stat_disable_node_gets() ->
+    ok.
+
+test_stat_disable_not_stat() ->
+    ok.
 
 
 %% riak-admin stat reset
 
-test_reset_stats() ->
-  ok.
+test_stat_reset_riak_star() ->
+    ok.
 
-test_reset_stats_again() ->
-  ok.
+test_stat_reset_riak_node_stats() ->
+    ok.
 
-test_fake_stat_reset() ->
-  ok.
+test_stat_reset_legacy_search() ->
+    ok.
+
+test_stat_reset_node_gets() ->
+    ok.
+
+test_stat_reset_not_stat() ->
+    ok.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%% HELPER FUNCTIONS %%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
+
 % % % % % % % % % % % % % % % % % % % % % % %
-%%%%%%%%%%%%% riak_stat_profiles %%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%% profiles %%%%%%%%%%%%%%%%%%
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%% TESTS DESCRIPTIONS %%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 save_profile_test_() ->
-  ?profiletest("riak-admin stat save-profile",
-    [
-      {"Saving a profile", fun test_save_profile/0},
-      {"Saving a profile twice", fun test_save_profile_again/0}
-    ]).
+    ?profiletest("riak-admin stat save-profile <entry>",
+        [
+            {"Saving a profile",                  fun test_save_profile/0},
+            {"Saving a profile twice",            fun test_save_profile_again/0}
+        ]).
 
 load_profile_test_() ->
-  ?profiletest("riak-admin stat load-profile",
-    [
-      {"Loading a profile", fun test_load_profile/0},
-      {"Loading an already loaded profile", fun test_load_profile_again/0},
-      {"Loading a non-existent profile", fun test_load_fake_profile/0}
-    ]).
+    ?profiletest("riak-admin stat load-profile <entry>",
+        [
+            {"Loading a profile",                 fun test_load_profile/0},
+            {"Loading an already loaded profile", fun test_load_profile_again/0},
+            {"Loading a non-existent profile",    fun test_load_fake_profile/0}
+        ]).
 
-delete_profile_test_() ->
-  ?profiletest("riak-admin stat delete-profile",
-    [
-      {"Delete a profile", fun test_delete_profile/0},
-      {"Delete a non-existent profile", fun test_delete_fake_profile/0}
-    ]).
+remove_profile_test_() ->
+    ?profiletest("riak-admin stat remove-profile <entry>",
+        [
+            {"Delete a profile",                  fun test_delete_profile/0},
+            {"Delete a non-existent profile",     fun test_delete_fake_profile/0}
+        ]).
 
 reset_profiles_test_() ->
-  ?profiletest("riak-admin stat reset-profiles",
-    [
-      {"Reset a profile that is loaded", fun test_reset_profiles/0},
-      {"Reset without a profile loaded", fun test_reset_without/0}
-    ]).
+    ?profiletest("riak-admin stat reset-profiles <entry>",
+        [
+            {"Reset a profile that is loaded",    fun test_reset_profiles/0},
+            {"Reset without a profile loaded",    fun test_reset_without/0}
+        ]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%% ACTUAL TESTS %%%%%%%%%%%%%%%%
@@ -397,37 +682,37 @@ reset_profiles_test_() ->
 %% riak-admin stat save-profile
 
 test_save_profile() ->
-  ok.
+    ok.
 
 test_save_profile_again() ->
-  ok.
+    ok.
 
 %% riak-admin stat load-profile
 
 test_load_profile() ->
-  ok.
+    ok.
 
 test_load_profile_again() ->
-  ok.
+    ok.
 
 test_load_fake_profile() ->
-  ok.
+    ok.
 
 %% riak-admin stat delete-profile
 
 test_delete_profile() ->
-  ok.
+    ok.
 
 test_delete_fake_profile() ->
-  ok.
+    ok.
 
 %% riak-admin stat reset-profiles
 
 test_reset_profiles() ->
-  ok.
+    ok.
 
 test_reset_without() ->
-  ok.
+    ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%% HELPER FUNCTIONS %%%%%%%%%%%%%%
@@ -435,7 +720,7 @@ test_reset_without() ->
 
 
 % % % % % % % % % % % % % % % % % % % % % % %
-%%%%%%%%%%%%%% riak_stat_admin %%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%% admin %%%%%%%%%%%%%%%%%%%%
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%% TESTS DESCRIPTIONS %%%%%%%%%%%%%
@@ -443,97 +728,112 @@ test_reset_without() ->
 
 %%% API
 
-admin_get_stats_test_() ->
-  ?setuptest("riak_stat_admin:get_stats()",
-    [
-      {"Return a list of Stats from riak_stat_admin ets", fun test_admin_get_stats/0}
-    ]).
+read_admin_api_test_() ->
+    ?setuptest("riak_stat admin api read functions",
+        [
+            {"riak_stat:get_stats()",                   fun test_get_stats/0},
+            {"riak_stat:get_stat(Path)",                fun test_get_stat/0},
+            {"riak_stat:get_value(Arg}",                fun test_get_value/0},
+            {"riak_stat:get_app_stats(App)",            fun test_get_app_stats/0},
+            {"riak_stat:get_stats_values(App)",         fun test_get_stats_values/0},
+            {"riak_stat:get_stats_info(App)",           fun test_get_stats_info/0},
+            {"riak_stat:aggregate(Stats, Dps)",         fun test_aggregate_stats/0}
+        ]).
 
-admin_get_priority_test_() ->
-  ?setuptest("riak_stat_admin:priority()",
-    [
-      {"Return the currently set priority", fun test_admin_get_priority/0}
-    ]).
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-admin_read_stats_test_() ->
-  ?setuptest("riak_stat_admin:read_stats(app)",
-    [
-      {"Read the stats for riak_core", fun test_admin_read_stats/0},
-      {"Read the stats for a app that isnt there", fun test_admin_read_fake_stats/0}
-    ]).
+create_admin_api_test_() ->
+    ?setuptest("riak_stat admin api create functions",
+        [
+            {"register a stat that already exists",     fun test_re_register/0},
+            {"register an unregistered stat",           fun test_stat_unregister/0}
+        ]).
 
-admin_parse_info_test_() ->
-  ?setuptest("riak_stat_admin:parse_information(Data, Status)",
-    [
-      {"Data from console", fun test_console_parse_info/0},
-      {"Data from profile", fun test_profile_parse_info/0},
-      {"Extraterrestial Data", fun test_ET_data_parse_info/0}
-    ]).
+update_admin_api_test_() ->
+    ?setuptest("riak_stat admin api update functions",
+        [
+            {"update a non-existent stat",              fun test_update_non_stat/0},
+            {"updata a stat twice at the same time",    fun test_multi_update/0},
+            {"update a stat that is unregistered",      fun test_update_unregistered/0}
+        ]).
 
-admin_alpha_stat_test_() ->
-  ?setuptest("riak_stat_admin:the_alpha_stat",
-    [
-      {"I must defeat him, to become the alpha", fun admin_alpha_/0},
-      {"We're all alphas now", fun admin_all_alpha/0}
-    ]).
-
-admin_find_entries_test_() ->
-  ?setuptest("riak_stat_admin:find_entries(Data, Status)",
-    [
-      {"find entries of known argument", fun test_admin_find_entries/0},
-      {"find entries of a known unknown argument", fun test_admin_find_no_entries/0}
-    ]).
-
-admin_print_test_() ->
-  ?setuptest("riak_stat_admin:print(Data, Status)",
-    [
-      {"print nothing", fun test_admin_print_0/0},
-      {"print_something", fun test_admin_print_entries/0}
-    ]).
-
+delete_admin_api_test_() ->
+    ?setuptest("riak_stat admin api delete functions",
+        [
+            {"unregister a stat",                       fun test_unregister_stat/0},
+            {"unregister a non-existent stat",          fun test_unregister_non_stat/0},
+            {"unregister, then enabled metadata again", fun test_unregister_no_meta/0},
+            {"unregister a stat twice at the same time",fun test_unregister_multi_stat/0}
+        ]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%% ACTUAL TESTS %%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-test_admin_get_stats() ->
-  ok.
+%% Read Functions
 
-test_admin_get_priority() ->
-  ok.
+test_get_stats() ->
+    ok.
 
-test_admin_read_stats() ->
-  ok.
+test_get_stat() ->
+    ok.
 
-test_admin_read_fake_stats() ->
-  ok.
+test_get_value() ->
+    ok.
 
-test_console_parse_info() ->
-  ok.
+test_get_app_stats() ->
+    ok.
 
-test_profile_parse_info() ->
-  ok.
+test_get_stats_values() ->
+    ok.
 
-test_ET_data_parse_info() ->
-  ok.
+test_get_stats_info() ->
+    ok.
 
-admin_alpha_() ->
-  ok.
+test_aggregate_stats() ->
+    ok.
 
-admin_all_alpha() ->
-  ok.
+%% Create Functions
 
-test_admin_find_entries() ->
-  ok.
+test_re_register() ->
+    ok.
 
-test_admin_find_no_entries() ->
-  ok.
+test_stat_unregister() ->
+    ok.
 
-test_admin_print_0() ->
-  ok.
+%% Update Functions
 
-test_admin_print_entries() ->
-  ok.
+test_update_non_stat() ->
+    ok.
+
+test_multi_update() ->
+    ok.
+
+test_update_unregistered() ->
+    ok.
+
+%% Delete Functions
+
+test_unregister_stat() ->
+    ok.
+
+test_unregister_non_stat() ->
+    ok.
+
+test_unregister_no_meta() ->
+    ok.
+
+test_unregister_multi_stat() ->
+    ok.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%% ACTUAL TESTS %%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%% HELPER FUNCTIONS %%%%%%%%%%%%%%

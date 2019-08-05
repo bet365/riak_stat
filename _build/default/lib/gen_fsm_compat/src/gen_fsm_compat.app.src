@@ -1,0 +1,11 @@
+{application,gen_fsm_compat,
+             [{description,"gen_fsm backwards compatibility"},
+              {vsn,"0.3.0"},
+              {registered,[]},
+              {applications,[kernel,stdlib]},
+              {env,[]},
+              {modules,[]},
+              {maintainers,["Heinz N. Gies"]},
+              {licenses,["Apache 2.0"]},
+              {links,[{"gitlab",
+                       "https://gitlab.com/Project-FiFo/gen_fsm_compat"}]}]}.

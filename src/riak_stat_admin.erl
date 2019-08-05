@@ -20,8 +20,7 @@
     get_stats_info/1,
     aggregate/2,
     register/3,
-    unregister/5,
-    update/3
+    unregister/5
 ]).
 
 %% Other API
@@ -47,7 +46,6 @@
 ]).
 
 -define(SERVER, ?MODULE).
--define(PFX, riak_stat:prefix()).
 
 -record(state, {}).
 
@@ -66,7 +64,7 @@ get_stats() ->
 
 %%% ------------------------------------------------------------------
 
--spec(get_stat(stats()) -> statlist()).
+-spec(get_stat(stats()) -> stats()).
 %% @doc
 %% give A Path to a particular stat such as : [riak,riak_kv,node,gets,time]
 %% to retrieve the stat
@@ -94,7 +92,7 @@ get_app_stats(App) ->
     {_N, MatchSpec, _DPs} = data_sanitise([?PFX, App, "**"], '_', '_'),
     print(gen_server:call(?SERVER, {get_stats, MatchSpec})).
 
--spec(get_stats_values(app()) -> statlist()).
+-spec(get_stats_values(app()) -> stats()).
 %% @doc
 %% Get the stats for the app and all their values
 %% @end
@@ -112,7 +110,7 @@ get_stats_info(App) ->
 
 %%% ------------------------------------------------------------------
 
--spec(aggregate(pattern(), datapoint()) -> statlist()).
+-spec(aggregate(pattern(), datapoint()) -> stats()).
 %% @doc
 %% @see exometer:aggregate
 %% Does the average of stats averages

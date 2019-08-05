@@ -31,21 +31,22 @@ data_sanitise(Data) ->
     data_sanitise(Data, '_', enabled).
 data_sanitise([Da | Ta], Type, Status) when is_list(Da) ->
     Dat = list_to_binary(Da),
-    Tat =
-    try  [T | A] = Ta of
-        T when is_list(T) and A == [] ->
-            list_to_binary(T);
-        T when A == [] ->
-            T;
-        T ->
-            L1 = list_to_binary(T),
-            [Al] = A,
-            L2 = list_to_binary(Al),
-            [L1 | L2]
-    catch error:_ ->
-        Ta
-    end,
-    data_sanitise([Dat | Tat], Type, Status);
+    A = lists:map(fun(Stat) -> list_to_binary(Stat) end, Ta),
+%%    Tat =
+%%    try  [_T | A] = Ta of
+%%        Tl when is_list(Tl) and A == [] ->
+%%            list_to_binary(Tl);
+%%        Tl when A == [] ->
+%%            Tl;
+%%        Tl ->
+%%            L1 = list_to_binary(Tl),
+%%            [Al] = A,
+%%            L2 = list_to_binary(Al),
+%%            [L1 | L2]
+%%    catch error:_ ->
+%%        Ta
+%%    end,
+    data_sanitise([Dat | A], Type, Status);
 data_sanitise([Da | Ta], Type, Status) when is_binary(Da)  ->
     data_sanitise([Da|Ta], Type, Status);
 data_sanitise([Da | Ta], Type, Status) when is_atom(Da)  ->

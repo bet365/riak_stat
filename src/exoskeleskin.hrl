@@ -43,7 +43,6 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--type arg()               :: any().
 -type sanitised_data()    :: {{port(), instance(), server_ip()}, stats() | profilename()}.
 
 -type jsonprops()         :: [{atom(), any()}].
@@ -59,7 +58,4 @@
 -type instance()          :: string().
 
 -type protocol()          :: udp | http.
-
--type reason()            :: any().
--type error()             :: {error, reason()}.
 

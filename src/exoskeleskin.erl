@@ -29,7 +29,7 @@
 setup(Arg) ->
     exoskele_console:setup(Arg).
 
--spec(setdown(arg()) -> ok()).
+-spec(setdown(arg()) -> ok).
 %% @doc
 %% Kill the udp servers currently running and pushing stats to an endpoint.
 %% @end

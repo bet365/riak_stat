@@ -42,13 +42,12 @@
     stop/0
 ]).
 
--define(PFX, riak_stat:prefix()).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec(find_entries(stats(), status()) -> statlist()).
+-spec(find_entries(stats(), status()) -> stats()).
 %% @doc
 %% Use @see exometer:find_entries to get the name, type and status of
 %% a stat given, fo all the stats that match the Status given put into
@@ -66,7 +65,7 @@ find_entries(Stats, Status) ->
                   end
               end, Stats).
 
--spec(find_static_stats(stats()) -> statlist()).
+-spec(find_static_stats(stats()) -> stats()).
 %% @doc
 %% Find all the enabled stats in exometer with the value 0 or [] and
 %% put into a list
@@ -82,13 +81,13 @@ find_static_stats(Stats) when is_list(Stats) ->
                                             [{Name, 0} | Acc];
                                         ({Name, []}, Acc) ->
                                             [{Name, 0} | Acc];
-                                        ({Name, _V}, Acc) ->
+                                        ({_Name, _V}, Acc) ->
                                             Acc
                                        end, [], List)
                   end
             end, Stats).
 
--spec(find_stats_info(stats(), datapoint()) -> statlist()).
+-spec(find_stats_info(stats(), datapoint()) -> stats()).
 %% @doc
 %% Find the stats and the info for that stat
 %% @end
@@ -203,7 +202,7 @@ get_values(Path) ->
 select_stat(Pattern) ->
     exometer:select(Pattern).
 
--spec(find_entries(stats()) -> statlist()).
+-spec(find_entries(stats()) -> stats()).
 %% @doc
 %% @see exometer:find_entries
 %% @end
@@ -217,7 +216,7 @@ find_entries(Stat) ->
 info(Name, Type) ->
     exometer:info(Name, Type).
 
--spec(aggregate(pattern(), datapoint()) -> statlist()).
+-spec(aggregate(pattern(), datapoint()) -> stats()).
 %% @doc
 %% "Aggregate data points of matching entries"
 %% for example: in riak_kv_stat:stats() ->

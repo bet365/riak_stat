@@ -1,7 +1,7 @@
 {application, riak_stat,
  [
   {description, "Stat Management for Riak"},
-  {vsn, "1.0.1"},
+  {vsn, "1.0.0"},
   {registered, []},
   {applications, [
                   kernel,
@@ -9,7 +9,8 @@
                   lager,
                   exometer_core,
                   riak_core,     % riak_core_metadata
-                  exoskeleton
+                  exoskeleton,
+                  webmachine
   ]},
   {mod, { riak_stat_app, []}},
   {env, [

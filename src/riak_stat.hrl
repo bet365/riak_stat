@@ -13,13 +13,13 @@
 
 -define(IS_ENABLED(Arg),  riak_stat_config:get_env(Arg) == true).
 -define(IS_DISABLED(Arg), riak_stat_config:get_env(Arg) == false).
--define(DISABLED_META_RESPONSE, io:fwrite("Metadata is Disabled~n")).
 
 -type exometererror() :: no_template | exists | not_found.
 -type profileerror()  :: profile_exists_already | no_stats | no_data | no_profile.
 -type metaerror()     :: unregistered | no_stat | no_status.
 -type reason()        :: exometererror() | profileerror() | metaerror() | any().
 -type error()         :: {error, reason()}.
+-type arg()               :: any().
 
 -type value()         :: any().
 -type exo_value()     :: {ok, value()}.
@@ -40,7 +40,7 @@
 -type stats()         :: list() | tuple().
 -type priority()      :: metadata | exometer.
 -type data()          :: any().
--type pfx()           :: riak_stat:prefix().
+-type pfx()           :: riak.
 -type incrvalue()     :: non_neg_integer().
 -type response()      :: ok | term() | error().
 

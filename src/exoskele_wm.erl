@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(exoskele_wm).
--include_lib("webmachine/include/webmachine.hrl").
+%%-include_lib("webmachine/include/webmachine.hrl"). % could not find in app list
 
 
 %% wm resource exports

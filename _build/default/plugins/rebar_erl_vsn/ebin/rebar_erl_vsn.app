@@ -1,0 +1,10 @@
+{application,rebar_erl_vsn,
+             [{description,"defines for erlang versions"},
+              {vsn,"0.2.2"},
+              {registered,[]},
+              {applications,[kernel,stdlib]},
+              {env,[]},
+              {modules,[rebar_erl_vsn,rebar_erl_vsn_prv]},
+              {maintainers,["Heinz N. Gies"]},
+              {licenses,["MIT"]},
+              {links,[]}]}.
