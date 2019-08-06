@@ -306,6 +306,8 @@ get_loaded_profile() ->
 %% Checks the metadata for the pkey provided
 %% returns [] | Value
 %% @end
+check_meta(Stat) when is_list(Stat) ->
+    check_meta(?STATKEY(Stat));
 check_meta({Prefix, Key}) ->
     case get(Prefix, Key) of
         undefined -> % Not found, return empty list
