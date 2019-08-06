@@ -333,7 +333,7 @@ find_unregister_status(_PN, _Stats) ->
 %% Returns the status of the stat saved in the metadata
 %% @end
 check_status(StatName) ->
-    case check_meta(?STATPFX(StatName)) of
+    case check_meta(?STATKEY(StatName)) of
         {Status, _Type, _Opts, _Aliases} ->
             {StatName, {status, Status}};
         _ ->
@@ -421,7 +421,7 @@ register_stat({StatName, Type, Opts, Aliases}) ->
 %% back to go into exometer
 %% @end
 register_stat(StatName, Type, Opts, Aliases) ->
-    case check_meta(?STATPFX(StatName)) of % check registration
+    case check_meta(?STATKEY(StatName)) of % check registration
         [] -> % if not registered return default Opts
             {Status, MetaOpts} = find_status(fresh, Opts),
             re_register_stat(StatName, {Status, Type, [{vclock, vclock:fresh(?NODEID, 1)} | MetaOpts], Aliases}),
@@ -467,7 +467,7 @@ find_status(re_reg, {Opts, MStatus, MOpts}) ->
 %% stats it will ignore stats that are marked unregistered
 %% @end
 unregister(Statname) ->
-    case check_meta(?STATPFX(Statname)) of
+    case check_meta(?STATKEY(Statname)) of
         {_Status, Type, MetaOpts, Aliases} ->
             re_register_stat(Statname, {unregistered, Type, MetaOpts, Aliases});
         _ -> ok

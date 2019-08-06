@@ -13,7 +13,7 @@
 -define(setupconsole(Fun), {setup,    fun setup_console/0,  fun cleanup/1, Fun}).
 -define(setupprofile(Fun), {setup,    fun setup_profile/0,  fun cleanup/1, Fun}).
 -define(fullsetup(Fun),    {setup,    fun setup_all/0,      fun cleanup/1, Fun}).
--define(exoskelesetup(Fun),{setup,    fun setup_exoskele/0, fun cleanup/1, Fun}).
+-define(exoskelesetup(Fun),{setup,    fun setup_exoskele/0, fun cleanup_exoskele/1, Fun}).
 
 -define(spawn(Test),       {spawn,        Test}).
 -define(timeout(Test),     {timeout, 120, Test}).
