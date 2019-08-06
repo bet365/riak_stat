@@ -127,7 +127,7 @@ aggregate(Stats, DPs) ->
 %% register apps stats into both meta and exometer
 %% @end
 register(P, App, Stat) ->
-    gen_server:call(?SERVER, {register, P, App, Stat}).
+    gen_server:cast(?SERVER, {register, P, App, Stat}).
 
 %%-spec(update(statname(), incrvalue(), type()) -> ok | error()).
 %%%% @doc
@@ -152,7 +152,7 @@ register(P, App, Stat) ->
 %% {status, unregistered}, and deletes the metric from exometer
 %% @end
 unregister(Pfx, App, Mod, Idx, Type) ->
-    gen_server:call(?SERVER, {unregister, {Pfx, App, Mod, Idx, Type}}).
+    gen_server:cast(?SERVER, {unregister, {Pfx, App, Mod, Idx, Type}}).
 
 
 %%%===================================================================
@@ -222,14 +222,7 @@ init([]) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 handle_call({get_stats, AllStats}, _From, State) ->
     {reply, select_entries(AllStats), State};
-handle_call({register, P, App, Stats}, _From, State) ->
-    lists:foreach(fun(Stat) ->
-        register_stat(P, App, Stat)
-                  end, Stats),
-    {reply, ok, State};
-handle_call({unregister, Pfx, App, Mod, Idx, Type}, _From, State) ->
-    unreg_stats(Pfx, App, Type, Mod, Idx),
-    {reply, ok, State};
+
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -238,7 +231,14 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-
+handle_cast({register, P, App, Stats}, State) ->
+    lists:foreach(fun(Stat) ->
+        register_stat(P, App, Stat)
+                  end, Stats),
+    {reply, ok, State};
+handle_cast({unregister, Pfx, App, Mod, Idx, Type}, State) ->
+    unreg_stats(Pfx, App, Type, Mod, Idx),
+    {reply, ok, State};
 handle_cast(_Request, State) ->
     {noreply, State}.
 
