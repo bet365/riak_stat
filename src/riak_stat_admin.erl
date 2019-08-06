@@ -78,7 +78,7 @@ get_stat(Path) ->
 %% Get the stat(s) value from exometer, only returns enabled values
 %% @end
 get_stat_value(Arg) ->
-    {Names, _MatchSpec, _DP} = data_sanitise(Arg),
+    [{Names, _MatchSpec, _DP}] = data_sanitise(Arg),
     Entries = find_entries(Names, '_'),
     print([find_stat_value(Entry) || {Entry, _} <- Entries]).
 
@@ -90,7 +90,7 @@ get_stat_value(Arg) ->
 %% "riak-admin stat show riak.<app>.**"
 %% @end
 get_app_stats(App) ->
-    {_N, MatchSpec, _DPs} = data_sanitise([?PFX, App, "**"], '_', '_'),
+    [{_N, MatchSpec, _DPs}] = data_sanitise([?PFX, App, "**"], '_', '_'),
     print(gen_server:call(?SERVER, {get_stats, MatchSpec})).
 
 -spec(get_stats_values(app()) -> stats()).
