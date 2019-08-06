@@ -210,7 +210,8 @@ timestamp() -> ?TIMESTAMP.
 %% into this function for the prefix.
 %% @end
 prefix() ->
-    riak_stat_config:get_env(?STAT_PREFIX, riak).
+    riak.
+%%    riak_stat_config:get_env(?STAT_PREFIX, riak).
 
 
 %%% ------------------------------------------------------------------
