@@ -51,103 +51,22 @@ setup() ->
     ?new(riak_stat_metadata),
 
     {ok, Pid} = riak_stat_admin:start_link(),
-    [Pid | [setup_stats() | setup_exometer()]].
+    [Pid].
 
-setup_exometer() ->
-    catch(?unload(exometer)),
-    catch(?unload(exometer_cpu)),
-    catch(?unload(exometer_duration)),
-    catch(?unload(exometer_entry)),
-    catch(?unload(exometer_folsom)),
-    catch(?unload(exometer_function)),
-    catch(?unload(exometer_histogram)),
-    catch(?unload(exometer_igor)),
-    catch(?unload(exometer_info)),
-    catch(?unload(exometer_probe)),
-    catch(?unload(exometer_proc)),
-    catch(?unload(exometer_report_lager)),
-    catch(?unload(exometer_report_tty)),
-    catch(?unload(exometer_shallowtree)),
-    catch(?unload(exometer_slide)),
-    catch(?unload(exometer_slot_slide)),
-    catch(?unload(exometer_spiral)),
-    catch(?unload(exometer_uniform)),
-    catch(?unload(exometer_util)),
-    ?new(exometer),
-    ?new(exometer_cpu),
-    ?new(exometer_duration),
-    ?new(exometer_entry),
-    ?new(exometer_folsom),
-    ?new(exometer_function),
-    ?new(exometer_histogram),
-    ?new(exometer_igor),
-    ?new(exometer_info),
-    ?new(exometer_probe),
-    ?new(exometer_proc),
-    ?new(exometer_report_lager),
-    ?new(exometer_report_tty),
-    ?new(exometer_shallowtree),
-    ?new(exometer_slide),
-    ?new(exometer_slot_slide),
-    ?new(exometer_spiral),
-    ?new(exometer_uniform),
-    ?new(exometer_util),
 
-    catch(?unload(exometer_admin)),
-    catch(?unload(exometer_cache)),
-    catch(?unload(exometer_folsom_monitor)),
-    catch(?unload(exometer_report)),
-    ?new(exometer_admin),
-    ?new(exometer_cache),
-    ?new(exometer_folsom_monitor),
-    ?new(exometer_report),
-
-    {ok, APid}  = exometer_admin:start_link(),
-    {ok, CPid}  = exometer_cache:start_link(),
-    {ok, FMPid} = exometer_folsom_monitor:start_link(),
-    {ok, RPid}  = exometer_report:start_link(),
-    [APid,CPid,FMPid,RPid].
-
-setup_metadata() ->
-    catch(?unload(riak_core_metadata)),
-    catch(?unload(riak_core_metadata_manager)),
-    catch(?unload(riak_core_metadata_hashtree)),
-    catch(?unload(riak_core_metadata_exchange_fsm)),
-    catch(?unload(riak_core_metadata_object)),
-    catch(?unload(riak_core_broadcast_handler)),
-    catch(?unload(dvvset)),
-    ?new(riak_core_metadata),
-    ?new(riak_core_metadata_manager),
-    ?new(riak_core_metadata_hashtree),
-    ?new(riak_core_metadata_exchange_fsm),
-    ?new(riak_core_metadata_object),
-    ?new(riak_core_broadcast_handler),
-    ?new(dvvset),
-
-    catch(?unload(riak_core_broadcast)),
-    catch(?unload(riak_core_metadata_manager)),
-    catch(?unload(riak_core_metadata_hashtree)),
-    ?new(riak_core_broadcast),
-    ?new(riak_core_metadata_manager),
-    ?new(riak_core_metadata_hashtree),
-
-    {ok, BPid}  = riak_core_broadcast:start_link(),
-    {ok, HTPid} = riak_core_metadata_hashtree:start_link(),
-    {ok, MPid}  = riak_core_metadata_manager:start_link(),
-    [BPid, HTPid, MPid].
 
 setup_console() ->
     catch (?unload(riak_stat_console)),
     ?new(riak_stat_console),
     {ok, Pid} = riak_stat_console:start_link(),
-    [setup_metadata() | [Pid | setup()]].
+    [Pid | setup()].
 
 
 setup_profile() ->
     catch (?unload(riak_stat_profiles)),
     ?new(riak_stat_profiles),
     {ok, Pid} = riak_stat_profiles:start_link(),
-    [setup_metadata() | [Pid | setup()]].
+    [Pid | setup()].
 
 
 setup_exoskele() ->
@@ -167,12 +86,6 @@ setup_exoskele() ->
     {ok, Pid} = exoskele_udp:start_link(Arg),
     [Pid | setup_all()]. %% exoskele depends on riak_stat
 
-setup_stats() ->
-%% use a fake list of stats and register them to know the outcome
-%% @see stats/0.
-    [riak_stat:register(App, Stats) || {App, Stats} <- register_stats()].
-
-
 
 setup_all() ->
     catch (?unload(riak_stat_console)),
@@ -183,7 +96,7 @@ setup_all() ->
     ?new(riak_stat_profiles),
     {ok, PPid} = riak_stat_profiles:start_link(),
 
-    [setup_metadata() | [PPid | [CPid | setup()]]].
+    [PPid | [CPid | setup()]].
 
 cleanup(Pids) ->
     process_flag(trap_exit, true),
@@ -216,189 +129,6 @@ cleanup_exoskele(Pids) ->
 %%%%%%%%%%%%%% STATS  FUNCTIONS %%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-register_stats() ->
-  lists:map(fun
-              ({[App |Name], Type, Opts, Aliases}) ->
-                  {App, {Name, Type, Opts, Aliases}};
-              ({[App | Name], Type, Opts}) ->
-                  {App, {Name, Type, Opts, []}};
-              ({[App | Name], Type}) ->
-                  {App, {Name, Type, [], []}}
-            end, stats()).
-
-stats() ->
-    [
-        {[riak_core,ignored_gossip_total],  counter,  [{status, enabled}],
-                                                                                [{value, ignored_gossip_total}]},
-        {[riak_core,rings_reconciled],      spiral,   [{status, enabled}], [{count, rings_reconciled_total},
-                                                                                 {one, rings_reconciled}]},
-        {[riak_core,ring_creation_size],    counter,  [{status, enabled}], [{value, ring_creation_size}]},
-        {[riak_core,gossip_received],       spiral,   [{status, enabled}], [{one, gossip_received}]},
-        {[riak_core,rejected_handoffs],     counter,  [{status, enabled}], [{value, rejected_handoffs}]},
-        {[riak_core,handoff_timeouts],      counter,  [{status, disabled}],[{value, handoff_timeouts}]},
-        {[riak_core,dropped_vnode_requests],counter,  [{status, disabled}],[{value, dropped_vnode_requests_total}]},
-        {[riak_core,converge_delay],        duration, [{status, disabled}],[{mean, converge_delay_mean},
-                                                                                 {min, converge_delay_min},
-                                                                                 {max, converge_delay_max},
-                                                                                 {last, converge_delay_last}]},
-        {[riak_core,rebalance_delay],       duration, [{status, disabled}],[{min, rebalance_delay_min},
-                                                                                 {max, rebalance_delay_max},
-                                                                                 {mean, rebalance_delay_mean},
-                                                                                 {last, rebalance_delay_last}]},
-
-        {[common,cpu_stats],                histogram,[{status, disabled},{sample_interval, 5000}],[
-                                                                                 {nprocs, cpu_nprocs},
-                                                                                 {avg1  , cpu_avg1},
-                                                                                 {avg5  , cpu_avg5},
-                                                                                 {avg15 , cpu_avg15}]},
-        {[common,mem_stats],                spiral,   [{status, enabled}], [{total, mem_total},
-                                                                                 {allocated, mem_allocated}]},
-        {[common,memory_stats],             spiral,   [{status, enabled}], [{total         , memory_total},
-                                                                                 {processes     , memory_processes},
-                                                                                 {processes_used, memory_processes_used},
-                                                                                 {system        , memory_system},
-                                                                                 {atom          , memory_atom},
-                                                                                 {atom_used     , memory_atom_used},
-                                                                                 {binary        , memory_binary},
-                                                                                 {code          , memory_code},
-                                                                                 {ets           , memory_ets}]},
-
-        {[riak_repl,last_report],            gauge,  [{status, enabled}],  []}, % repl only has 5 gagues
-        {[riak_repl,last_client_bytes_sent], gauge,  [{status, enabled}],  []},
-        {[riak_repl,last_client_bytes_recv], gauge,  [{status, enabled}],  []},
-        {[riak_repl,last_server_bytes_sent], gauge,  [{status, disabled}], []},
-        {[riak_repl,last_server_bytes_recv], gauge,  [{status, disabled}], []},
-
-        {[yz_stat,index,latency],        histogram,  [{status, disabled}], [{min,    search_index_latency_min},
-                                                                                 {max,    search_index_latency_max},
-                                                                                 {mean,   search_index_latency_mean},
-                                                                                 {median, search_index_latency_median},
-                                                                                 {95,     search_index_latency_95},
-                                                                                 {99,     search_index_latency_99},
-                                                                                 {999,    search_index_latency_999}]},
-        {[yz_stat,queue,batchsize],    histogram, [{status, disabled}],    [{min,    search_queue_batchsize_min},
-                                                                                 {max,    search_queue_batchsize_max},
-                                                                                 {mean,   search_queue_batchsize_mean},
-                                                                                 {median, search_queue_batchsize_median}]},
-        {[yz_stat,queue,drain,latency],histogram, [{status, disabled}], [{min,    search_queue_drain_latency_min},
-                                                                              {max,    search_queue_drain_latency_max},
-                                                                              {mean,   search_queue_drain_latency_mean},
-                                                                              {median, search_queue_drain_latency_median},
-                                                                              {95,     search_queue_drain_latency_95},
-                                                                              {99,     search_queue_drain_latency_99},
-                                                                              {999,    search_queue_drain_latency_999}]},
-        {[yz_stat,queue,batch,latency],histogram, [{status, enabled}],  [{min,    search_queue_batch_latency_min},
-                                                                              {max,    search_queue_batch_latency_max},
-                                                                              {mean,   search_queue_batch_latency_mean},
-                                                                              {median, search_queue_batch_latency_median},
-                                                                              {95,     search_queue_batch_latency_95},
-                                                                              {99,     search_queue_batch_latency_99},
-                                                                              {999,    search_queue_batch_latency_999}]},
-        {[yz_stat,'query',latency],    histogram, [{status, enabled}],  [{95    , search_query_latency_95},
-                                                                              {99    , search_query_latency_99},
-                                                                              {999   , search_query_latency_999},
-                                                                              {max   , search_query_latency_max},
-                                                                              {median, search_query_latency_median},
-                                                                              {min   , search_query_latency_min},
-                                                                              {mean  , search_query_latency_mean}]},
-
-        {[riak_api,pbc_connects],          spiral, [{status, enabled}], [{one, pbc_connects},
-                                                                              {count, pbc_connects_total}]},
-        {[riak_api,pbc_connects, active],counter,  [{status, enabled}], [{value, pbc_active}]},
-
-
-
-
-        {[riak_kv,vnode, gets],          spiral,     [{status, enabled}], [{one  , vnode_gets},
-                                                                                {count, vnode_gets_total}]},
-        {[riak_kv,vnode, gets, time],    histogram,  [{status, disabled}], [{mean  , vnode_get_fsm_time_mean},
-                                                                                 {median, vnode_get_fsm_time_median},
-                                                                                 {95    , vnode_get_fsm_time_95},
-                                                                                 {99    , vnode_get_fsm_time_99},
-                                                                                 {max   , vnode_get_fsm_time_100}]},
-        {[riak_kv,ignored_gossip_total], counter, [{status, disabled}], [{value, ignored_gossip_total}]},
-        {[riak_kv,vnode, heads],         spiral,  [{status, disabled}], [{one, vnode_heads},
-                                                                              {count, vnode_heads_total}]},
-        {[riak_kv,vnode, heads, time], histogram, [{status, disabled}], [{mean , vnode_head_fsm_time_mean},
-                                                                              {median, vnode_head_fsm_time_median},
-                                                                              {95    , vnode_head_fsm_time_95},
-                                                                              {99    , vnode_head_fsm_time_99},
-                                                                              {max   , vnode_head_fsm_time_100}]},
-        {[riak_kv,vnode, puts],     spiral,  [{status, disabled}], [{one  , vnode_puts},
-                                                                         {count, vnode_puts_total}]},
-        {[riak_kv,vnode, puts, time], histogram, [{status, enabled}], [{mean  , vnode_put_fsm_time_mean},
-                                                                            {median, vnode_put_fsm_time_median},
-                                                                            {95    , vnode_put_fsm_time_95},
-                                                                            {99    , vnode_put_fsm_time_99},
-                                                                            {max   , vnode_put_fsm_time_100}]},
-
-        {[riak_kv,node, gets],     spiral,  [{status, enabled}], [{one  , node_gets},
-                                                                       {count, node_gets_total}]},
-
-        {[riak_kv,node, gets, fsm, active], counter, [{status, enabled}], []},
-        {[riak_kv,node, gets, fsm, errors], spiral,  [{status, enabled}], [{one, node_get_fsm_errors},
-                                                                                {count, node_get_fsm_errors_total}]},
-        {[riak_kv,node, gets, objsize], histogram, [{status, enabled}], [{mean  , node_get_fsm_objsize_mean},
-                                                                              {median, node_get_fsm_objsize_median},
-                                                                              {95    , node_get_fsm_objsize_95},
-                                                                              {99    , node_get_fsm_objsize_99},
-                                                                              {max   , node_get_fsm_objsize_100}]},
-        {[riak_kv,node, gets, read_repairs],     spiral,  [{status, disabled}], [{one, read_repairs},
-                                                                                      {count, read_repairs_total}]},
-        {[riak_kv,node, gets, skipped_read_repairs], spiral, [{status, disabled}], [{one, skipped_read_repairs},
-                                                                                        {count, skipped_read_repairs_total}]},
-        {[riak_kv,node, gets, siblings],     histogram,  [{status, disabled}], [{mean  , node_get_fsm_siblings_mean},
-                                                                                      {median, node_get_fsm_siblings_median},
-                                                                                      {95    , node_get_fsm_siblings_95},
-                                                                                      {99    , node_get_fsm_siblings_99},
-                                                                                      {max   , node_get_fsm_siblings_100}]},
-        {[riak_kv,node, gets, time], histogram, [{status, disabled}], [{mean  , node_get_fsm_time_mean},
-                                                                            {median, node_get_fsm_time_median},
-                                                                            {95    , node_get_fsm_time_95},
-                                                                            {99    , node_get_fsm_time_99},
-                                                                            {max   , node_get_fsm_time_100}]},
-        {[riak_kv,node, gets, counter],     spiral,  [{status, disabled}], [{one  , node_gets_counter},
-                                                                                  {count, node_gets_counter_total}]},
-        {[riak_kv,node, gets, counter, objsize], histogram, [{status, enabled}], [{mean  , node_get_fsm_counter_objsize_mean},
-                                                                                        {median, node_get_fsm_counter_objsize_median},
-                                                                                        {95    , node_get_fsm_counter_objsize_95},
-                                                                                        {99    , node_get_fsm_counter_objsize_99},
-                                                                                        {max   , node_get_fsm_counter_objsize_100}]},
-        {[riak_kv,node, gets, counter, read_repairs],     spiral,  [{status, enabled}], [{one  , read_repairs_counter},
-                                                                                        {count, read_repairs_counter_total}]},
-        {[riak_kv,node, gets, counter, siblings], histogram, [{status, enabled}], [{mean  , node_get_fsm_counter_siblings_mean},
-                                                                                        {median, node_get_fsm_counter_siblings_median},
-                                                                                        {95    , node_get_fsm_counter_siblings_95},
-                                                                                        {99    , node_get_fsm_counter_siblings_99},
-                                                                                        {max   , node_get_fsm_counter_siblings_100}]},
-        {[riak_kv,node, gets, set],     spiral,  [{status, enabled}], [{one  , node_gets_set},
-                                                                            {count, node_gets_set_total}]},
-        {[riak_kv,counter, actor_count],     histogram,  [{status, disabled}], [{mean  , counter_actor_counts_mean},
-                                                                                  {median, counter_actor_counts_median},
-                                                                                  {95    , counter_actor_counts_95},
-                                                                                  {99    , counter_actor_counts_99},
-                                                                                  {max   , counter_actor_counts_100}]},
-        {[riak_kv,set, actor_count],     histogram,  [{status, disabled}], [{mean  , set_actor_counts_mean},
-                                                                                  {median, set_actor_counts_median},
-                                                                                  {95    , set_actor_counts_95},
-                                                                                  {99    , set_actor_counts_99},
-                                                                                  {max   , set_actor_counts_100}]},
-        {[riak_kv,map, actor_count],     histogram,  [{status, disabled}], [{mean  , map_actor_counts_mean},
-                                                                                  {median, map_actor_counts_median},
-                                                                                  {95    , map_actor_counts_95},
-                                                                                  {99    , map_actor_counts_99},
-                                                                                  {max   , map_actor_counts_100}]},
-
-        {[riak_pipe,pipeline, create], spiral, [{status, enabled}], [{count, pipeline_create_count},
-                                                                          {one, pipeline_create_one}]},
-        {[riak_pipe,pipeline, create, error],     spiral,  [{status, disabled}], [{count, pipeline_create_error_count},
-                                                                                       {one, pipeline_create_error_one}]},
-        {[riak_pipe,pipeline, active],     counter,  [{status, disabled}], [{value, pipeline_active}]}
-
-
-
-
-    ].
 
 
 % % % % % % % % % % % % % % % % % % % % % % %

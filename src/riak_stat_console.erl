@@ -52,7 +52,7 @@
 %% otherwise use: riak-admin stat show <entry>/status=* | disabled
 %% @end
 show_stat(Arg) ->
-    {_S, MatchSpec, DP} = data_sanitise(Arg),
+    [{_S, MatchSpec, DP}] = data_sanitise(Arg),
     Stats = gen_server:call(?SERVER, {show, MatchSpec, DP}),
     print_stats(Stats).
 
@@ -61,7 +61,7 @@ show_stat(Arg) ->
 %% Check which stats in exometer are not updating, only checks enabled
 %% @end
 show_stat_0(Arg) ->
-    {_Stats, MatchSpec, _DP} = data_sanitise(Arg),
+    [{_Stats, MatchSpec, _DP}] = data_sanitise(Arg),
     NotUpdating = gen_server:call(?SERVER, {show_stat_0, MatchSpec}),
     print_stats(NotUpdating).
 
@@ -71,7 +71,7 @@ show_stat_0(Arg) ->
 %% @end
 stat_info(Arg) ->
     {Attrs, RestArg} = pick_info_attrs(Arg),
-    {Stats, _MatchSpec, _DP} = data_sanitise(RestArg),
+    [{Stats, _MatchSpec, _DP}] = data_sanitise(RestArg),
     Found = gen_server:call(?SERVER, {stat_info, Stats, Attrs}),
     print_stats(Found).
 
@@ -81,7 +81,7 @@ stat_info(Arg) ->
 %% are not updating
 %% @end
 disable_stat_0(Arg) ->
-    {_S, MatchSpec, _DP} = data_sanitise(Arg),
+    [{_S, MatchSpec, _DP}] = data_sanitise(Arg),
     gen_server:call(?SERVER, {disable_stat_0, MatchSpec}).
 
 -spec(status_change(data(), status()) -> ok).
@@ -89,7 +89,7 @@ disable_stat_0(Arg) ->
 %% change the status of the stat (in metadata and) in exometer
 %% @end
 status_change(Arg, ToStatus) ->
-    {Stats, _MatchSpec, _DP} = data_sanitise(Arg),
+    [{Stats, _MatchSpec, _DP}] = data_sanitise(Arg),
     gen_server:call(?SERVER, {change_status, Stats, ToStatus}).
 
 -spec(reset_stat(data()) -> ok).
@@ -98,7 +98,7 @@ status_change(Arg, ToStatus) ->
 %% has been reset
 %% @end
 reset_stat(Arg) ->
-    {Stats, _MatchSpec, _DP} = data_sanitise(Arg),
+    [{Stats, _MatchSpec, _DP}] = data_sanitise(Arg),
     gen_server:call(?SERVER, {reset, Stats}).
 
 %%%===================================================================
