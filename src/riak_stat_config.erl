@@ -21,8 +21,9 @@ get_env(Env) ->
     P.
 
 get_env(Env, Default) ->
-    {ok, P} = application:get_env(?APP, Env, Default),
-    P.
+%%    {ok, P} =
+        application:get_env(?APP, Env, Default).
+%%    P.
 
 set_env(Env, Value) ->
     application:set_env(?APP, Env, Value).

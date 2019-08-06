@@ -59,8 +59,9 @@
 %% "riak-admin stat show riak.**"
 %% @end
 get_stats() ->
-    {_N, MatchSpec, _DPs} = data_sanitise([?PFX ++ "**"], '_', '_'),
-    print(gen_server:call(?SERVER, {get_stats, MatchSpec})).
+    [{_N, MatchSpec, _DPs}] = data_sanitise([<<"riak.**">>], '_', '_'),
+    Stats = gen_server:call(?SERVER, {get_stats, MatchSpec}),
+    print(Stats).
 
 %%% ------------------------------------------------------------------
 

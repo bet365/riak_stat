@@ -90,7 +90,7 @@ get_host(Info) ->
 %% todo: improve the stat collection method
 %% @end
 get_stats() ->
-    case riak_stat_config:get_env(exoskele_stats_default, classic) of
+    case application:get_env(riak_stat, exoskele_stats_default, classic) of
         classic ->
             riak_kv_status:get_stats(web);
         beta ->

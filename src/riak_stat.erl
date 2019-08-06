@@ -53,7 +53,7 @@
     get_stat/1
 ]).
 
--define(STAT_PREFIX, stat_prefix).
+%%-define(STAT_PREFIX, stat_prefix).
 
 %%%===================================================================
 %%% Console API
@@ -210,8 +210,8 @@ timestamp() -> ?TIMESTAMP.
 %% into this function for the prefix.
 %% @end
 prefix() ->
-    riak.
-%%    riak_stat_config:get_env(?STAT_PREFIX, riak).
+%%    riak.
+    riak_stat_config:get_env(stat_prefix, riak).
 
 
 %%% ------------------------------------------------------------------
