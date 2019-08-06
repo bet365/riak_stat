@@ -222,7 +222,7 @@ init([]) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 handle_call({get_stats, AllStats}, _From, State) ->
     {reply, select_entries(AllStats), State};
-handle_call({register, {P, App, Stats}}, _From, State) ->
+handle_call({register, P, App, Stats}, _From, State) ->
     lists:foreach(fun(Stat) ->
         register_stat(P, App, Stat)
                   end, Stats),
