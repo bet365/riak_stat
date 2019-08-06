@@ -59,7 +59,7 @@ data_sanitise(Data, Type, Status) when is_binary(Data) ->
 data_sanitise(Data, Type, Status) when is_atom(Data) ->
     data_sanitise([atom_to_binary(Data, latin1)], Type, Status);
 data_sanitise(Data, Type, Status) when is_list(Data) ->
-    io:format("Data in sanitise :~p~n", [Data]),
+%%    io:format("Data in sanitise :~p~n", [Data]),
     lists:map(fun(D) ->
         data_sanitise_(D, Type, Status)
               end, Data).
@@ -70,7 +70,9 @@ data_sanitise_(Data, Type, Status) ->
     % [<<"riak.riak_kv.*.gets.**">> | <<"status=*">>]
     io:format("Data : ~p -> Stat : ~p, Est : ~p~n", [Data, Stat, Est]),
     {Type, Status, DPs} = type_status_and_dps(Est, Type, Status, default),
+    io:format("Type : ~p -> Status : ~p, DPs : ~p~n", [Type, Status, DPs]),
     {Names, MatchSpecs} = stat_entries(Stat, Type, Status),
+    io:format("Name : ~p, Matchspec : ~p, Dps : ~p~n", [Names, MatchSpecs, DPs]),
     {Names, MatchSpecs, DPs}.
 
 
@@ -139,18 +141,18 @@ stat_entries("[" ++ _ = Expr, _Type, _Status) ->
             []
     end; %% legacy Code
 stat_entries(Data, Type, Status) when is_atom(Status) ->
-    io:format("stat_entries ----- Data : ~p ~n", [Data]),
+%%    io:format("stat_entries ----- Data : ~p ~n", [Data]),
     Parts = re:split(Data, "\\.", [{return, list}]),
     io:format("stat_entries -----Parts : ~p ~n", [Parts]),
     Heads = replace_parts(Parts),
     io:format("stat_entries -----Heads : ~p ~n", [Heads]),
     {Heads,[{{H, Type, Status}, [], ['$_']} || H <- Heads]};
 stat_entries(_Stat, _Type, Status) ->
-    io:format("stat_entries illegal~n"),
+%%    io:format("stat_entries illegal~n"),
     io:fwrite("(Illegal status : ~p~n", [Status]).
 
 replace_parts(Parts) ->
-    io:format("replace parts: ~p~n", [Parts]),
+%%    io:format("replace parts: ~p~n", [Parts]),
     case split(Parts, "**", []) of
         {_, []} ->
             io:format("replace_parts {_,[]}~n"),
@@ -170,13 +172,13 @@ split([H | T], H, Acc) ->
 split([H | T], X, Acc) ->
     split(T, X, [H | Acc]);
 split([], _, Acc) ->
-    io:format("split~n"),
+%%    io:format("split~n"),
 
     {lists:reverse(Acc), []}.
 
 
 replace_parts_1([H | T]) ->
-    io:format("replace parts again [~p | ~p]~n", [H,T]),
+%%    io:format("replace parts again [~p | ~p]~n", [H,T]),
     R = replace_part(H),
     case T of
         '_' -> '_';
