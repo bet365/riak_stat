@@ -51,8 +51,6 @@ init([]) ->
     SupFlags =
         {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    AdminChild   = ?CHILD(riak_stat_admin),
-    ConsoleChild = ?CHILD(riak_stat_console),
     ProfileChild = ?CHILD(riak_stat_profiles),
 
-    {ok, {SupFlags, [AdminChild, ConsoleChild, ProfileChild]}}.
+    {ok, {SupFlags, [ProfileChild]}}.

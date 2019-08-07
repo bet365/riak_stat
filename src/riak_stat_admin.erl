@@ -8,8 +8,6 @@
 
 -include("riak_stat.hrl").
 
--behaviour(gen_server).
-
 %% API
 -export([
     get_stats/0,
@@ -30,24 +28,6 @@
     print/2
 ]).
 
-%% API
--export([
-    start_link/0
-]).
-
-%% gen_server callbacks
--export([
-    init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3
-]).
-
--define(SERVER, ?MODULE).
-
--record(state, {}).
 
 %%%===================================================================
 %%% API
@@ -60,7 +40,7 @@
 %% @end
 get_stats() ->
     [{_N, MatchSpec, _DPs}] = data_sanitise([<<"riak.**">>], '_', '_'),
-    Stats = gen_server:call(?SERVER, {get_stats, MatchSpec}),
+    Stats = select_entries(MatchSpec),
     print(Stats).
 
 %%% ------------------------------------------------------------------
@@ -91,7 +71,7 @@ get_stat_value(Arg) ->
 %% @end
 get_app_stats(App) ->
     [{_N, MatchSpec, _DPs}] = data_sanitise([?PFX, App, "**"], '_', '_'),
-    print(gen_server:call(?SERVER, {get_stats, MatchSpec})).
+    print(select_entries(MatchSpec)).
 
 -spec(get_stats_values(app()) -> stats()).
 %% @doc
@@ -127,9 +107,10 @@ aggregate(Stats, DPs) ->
 %% @doc
 %% register apps stats into both meta and exometer
 %% @end
-register(P, App, Stat) ->
-    gen_server:cast(?SERVER, {register, P, App, Stat}).
-
+register(P, App, Stats) ->
+    lists:foreach(fun(Stat) ->
+        register_stat(P, App, Stat)
+                  end, Stats).
 %%-spec(update(statname(), incrvalue(), type()) -> ok | error()).
 %%%% @doc
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -153,7 +134,7 @@ register(P, App, Stat) ->
 %% {status, unregistered}, and deletes the metric from exometer
 %% @end
 unregister(Pfx, App, Mod, Idx, Type) ->
-    gen_server:cast(?SERVER, {unregister, {Pfx, App, Mod, Idx, Type}}).
+    unreg_stats(Pfx, App, Type, Mod, Idx).
 
 
 %%%===================================================================
@@ -195,74 +176,6 @@ find_stat_info(Stat) ->
     Info = [name, type, module, value, cache, status, timestamp, options],
     riak_stat_coordinator:find_stats_info(Stat, Info).
 
-%%--------------------------------------------------------------------
--spec(start_link() ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-%%%===================================================================
-%%% gen_server callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
-    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore).
-init([]) ->
-    {ok, #state{}}.
-
-%%--------------------------------------------------------------------
--spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #state{}) ->
-  {reply, Reply :: term(), NewState :: #state{}} |
-  {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-  {noreply, NewState :: #state{}} |
-  {noreply, NewState :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-  {stop, Reason :: term(), NewState :: #state{}}).
-handle_call({get_stats, AllStats}, _From, State) ->
-    {reply, select_entries(AllStats), State};
-
-handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
-
-%%--------------------------------------------------------------------
--spec(handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast({register, P, App, Stats}, State) ->
-    lists:foreach(fun(Stat) ->
-        register_stat(P, App, Stat)
-                  end, Stats),
-    {reply, ok, State};
-handle_cast({unregister, Pfx, App, Mod, Idx, Type}, State) ->
-    unreg_stats(Pfx, App, Type, Mod, Idx),
-    {reply, ok, State};
-handle_cast(_Request, State) ->
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
--spec(handle_info(Info :: timeout() | term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}).
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
--spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-      State :: #state{}) -> term()).
-terminate(_Reason, _State) ->
-    ok.
-
-%%--------------------------------------------------------------------
--spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
-    Extra :: term()) ->
-    {ok, NewState :: #state{}} | {error, Reason :: term()}).
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
