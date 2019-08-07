@@ -31,6 +31,7 @@ set_env(Env, Value) ->
 %% ---------------------------------------------------------------------
 
 ensure_all() ->
+    io:format("ensure_all_started(~p)~n", [?APP]),
     application:ensure_all_started(?APP).
 %%    {ok, Started} = application:ensure_all_started(exometer_core),
 %%    io:format("Started: ~p ~n", [Started]), ok.

@@ -11,7 +11,7 @@
 -define(META_ENABLED, metadata_enabled).
 -define(EXOSKEL_ENABLED, exoskeleskin_enabled).
 
--define(IS_ENABLED(Arg),  riak_stat_config:get_env(Arg, true)).
+-define(IS_ENABLED(Arg),  riak_stat_config:get_env(Arg, false)).
 %%  == true).
 -define(IS_DISABLED(Arg), riak_stat_config:get_env(Arg) == false).
 

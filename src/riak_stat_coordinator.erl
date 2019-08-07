@@ -289,9 +289,11 @@ get_loaded_profile() ->
 %% and send that status to exometer
 %% @end
 register({Stat, Type, Opts, Aliases} = Arg) ->
+    io:format("riak_stat_coordinator:register(~p)~n", [Arg]),
     Fun = fun register_in_both/4,
     case maybe_meta(Fun, Arg) of
         false  ->
+            io:format("riak_stat_coordinatoe:register_in_exometer(Arg)~n"),
             register_in_exometer(Stat, Type, Opts, Aliases);
         Ans ->
             Ans
@@ -412,6 +414,7 @@ aliases({Arg, Value}) ->
     riak_stat_exometer:aliases(Arg, Value).
 
 register_in_exometer(StatName, Type, Opts, Aliases) ->
+    io:format("riak_stat_coordinator:register_in_exometer(~p)~n", [StatName]),
     riak_stat_exometer:register_stat(StatName, Type, Opts, Aliases).
 
 unregister_in_exometer(StatName) ->

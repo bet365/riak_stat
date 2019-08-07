@@ -52,5 +52,5 @@ init([]) ->
         {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
     ProfileChild = ?CHILD(riak_stat_profiles),
-
+    io:format("ProfileChild = ~p~n", [ProfileChild]),
     {ok, {SupFlags, [ProfileChild]}}.

@@ -9,11 +9,14 @@
 %% Application callbacks
 %% ===================================================================
 
-start(_StartType, _StartArgs) ->
+start(StartType, StartArgs) ->
+    io:format("riak_stat_app:start(~p,~p)~n", [StartType, StartArgs]),
     riak_stat_sup:start_link(),
-    riak_stat_config:ensure_all(),
-
-    exoskele_sup:start_link().
+    io:format("riak_stat_sup:start_link()"),
+    Started = riak_stat_config:ensure_all(),
+    io:format("riak_stat_config:ensure_all()~nStarted: ~p~n", [Started]),
+    exoskele_sup:start_link(),
+    io:format("exoskele_sup:start_link()").
 
 stop(_State) ->
     ok.

@@ -272,6 +272,7 @@ get_stats_info(App) ->
 %% and in exometer_core
 %% @end
 register(App, Stats) ->
+    io:format("riak_stat:register(~p, ~p, ~p)~n", [prefix(), App, Stats]),
     riak_stat_admin:register(prefix(), App, Stats).
 
 -spec(update(stats(), non_neg_integer(), type()) -> ok | arg()).

@@ -110,8 +110,10 @@ find_stats_info(Stats, Info) when is_list(Info) ->
 %% is registered.
 %% @end
 register_stat(StatName, Type, Opts, Aliases) ->
-    re_register(StatName, Type, Opts),
-    lists:foreach(
+  io:format("riak_stat_exometer:register_stat(~p)~n", [StatName]),
+  Registerd = re_register(StatName, Type, Opts),
+  io:format("riak_stat_exometer:re_register(Stat) = ~p~n", [Registerd]),
+  lists:foreach(
         fun({DP, Alias}) ->
             aliases(new, [Alias, StatName, DP])
         end, Aliases).
@@ -119,6 +121,7 @@ register_stat(StatName, Type, Opts, Aliases) ->
 re_register(StatName, Type) ->
     re_register(StatName, Type, []).
 re_register(StatName, Type, Opts) ->
+  io:format("Name: ~p, Type: ~p, Opts: ~p~n", [StatName, Type, Opts]),
     exometer:re_register(StatName, Type, Opts).
 
 -spec(alias(Group :: term()) -> ok | acc()).
@@ -149,7 +152,9 @@ alias(Group) ->
 %% goes to exometer_alias and performs the type of alias function specified
 %% @end
 aliases(new, [Alias, StatName, DP]) ->
-    exometer_alias:new(Alias, StatName, DP);
+  io:format("riak_stat_exometer:aliases(~p, ~p, ~p)~n", [Alias, StatName, DP]),
+  Answer = exometer_alias:new(Alias, StatName, DP),
+  io:format("riak_stat_exometer:aliases(etc) = ~p~n", Answer);
 aliases(prefix_foldl, []) ->
     exometer_alias:prefix_foldl(<<>>, alias_fun(), orddict:new());
 aliases(regexp_foldr, [N]) ->

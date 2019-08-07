@@ -108,6 +108,7 @@ aggregate(Stats, DPs) ->
 %% register apps stats into both meta and exometer
 %% @end
 register(P, App, Stats) ->
+    io:format("riak_stat_admin:register(~p)~n", [App]),
     lists:foreach(fun(Stat) ->
         register_stat(P, App, Stat)
                   end, Stats).
@@ -182,6 +183,8 @@ find_stat_info(Stat) ->
 %%%===================================================================
 
 register_stat(P, App, Stat) ->
+    io:format("riak_stat_admin:register_stat(~p)~n", [Stat]),
+
     {Name, Type, Opts, Aliases} =
         case Stat of
             {N, T} -> {N, T, [], []};
@@ -189,8 +192,10 @@ register_stat(P, App, Stat) ->
             {N, T, Os, As} -> {N, T, Os, As}
         end,
     StatName = stat_name(P, App, Name),
+    io:format("riak_stat_admin:stat_name(~p)~n", [StatName]),
     NewOpts = add_cache(Opts),
-    % Pull out the status of the stat from MetaData
+    io:format("riak_stat_admin:add_cache(~p)~n", [NewOpts]),
+% Pull out the status of the stat from MetaData
     riak_stat_coordinator:register({StatName, Type, NewOpts, Aliases}).
 
 add_cache(Opts) ->

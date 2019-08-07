@@ -132,6 +132,7 @@ reset_profile() ->
 -spec(start_link() ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
+    io:format("riak_stat_profiles:start_link()~n"),
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
@@ -142,8 +143,7 @@ start_link() ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
 init([]) ->
-
-
+    io:format("riak_stat_profiles:init([])~n"),
 %%    Profiles = pull_profiles(), % Pull out already saved profiles in the metadata
     Tid =                       % create ets for profiles
       ets:new(profiles, [
@@ -154,18 +154,21 @@ init([]) ->
         {write_concurrency, true},
         {read_concurrency, true}
       ]),
-
+    io:format("riak_stat_profiles:init() -> ets:new = ~p~n", [Tid]),
     Loaded = last_loaded_profile(),
+    io:format("riak_stat_profiles:init() -> loaded_profile = ~p~n", [Loaded]),
     case pull_profiles() of
         false -> ok;
-        Profiles -> ets:insert(Tid, Profiles)
+        Profiles ->
+            Ets = ets:insert(Tid, Profiles),
+            io:format("riak_stat_profiles:init() -> pull_profile: ~p~n", [Profiles]),
+            io:format("riak_stat_profiles:init() -> ets:insert = ~p~n", [Ets])
     end,
-%%    io:format("Profiles : ~p~n", [Profiles]),
     case Loaded of %% load last profile that was loaded
         [<<"none">>] -> [];
         false -> ok;
         Other ->
-            io:format("Other: ~p~n", [Other]),
+%%            io:format("Other: ~p~n", [Other]),
             gen_server:call(?SERVER, {load, Other})
     end,
 
