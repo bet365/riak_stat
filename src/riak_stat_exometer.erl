@@ -110,11 +110,11 @@ find_stats_info(Stats, Info) when is_list(Info) ->
 %% is registered.
 %% @end
 register_stat(StatName, Type, Opts, Aliases) ->
+    re_register(StatName, Type, Opts),
     lists:foreach(
         fun({DP, Alias}) ->
-            aliases(new, [Alias, StatName, DP]) %% returns -> ok | {error, Reason}
-        end, Aliases),
-    re_register(StatName, Type, Opts). %% returns -> ok.
+            aliases(new, [Alias, StatName, DP])
+        end, Aliases).
 
 re_register(StatName, Type) ->
     re_register(StatName, Type, []).
@@ -124,25 +124,25 @@ re_register(StatName, Type, Opts) ->
 -spec(alias(Group :: term()) -> ok | acc()).
 alias(Group) ->
     lists:keysort(
-      1,
-      lists:foldl(
-        fun({K, DPs}, Acc) ->
-          case get_datapoint(K, [D || {D,_} <- DPs]) of
-            {ok, Vs} when is_list(Vs) ->
-              lists:foldr(fun({D,V}, Acc1) ->
-                {_,N} = lists:keyfind(D,1,DPs),
-                [{N,V}|Acc1]
-                          end, Acc, Vs);
-            Other ->
-              Val = case Other of
-                      {ok, disabled} -> undefined;
-                      _ -> 0
-                    end,
-              lists:foldr(fun({_,N}, Acc1) ->
-                [{N,Val}|Acc1]
-                          end, Acc, DPs)
-          end
-        end, [], orddict:to_list(Group))).
+        1,
+        lists:foldl(
+            fun({K, DPs}, Acc) ->
+                case get_datapoint(K, [D || {D,_} <- DPs]) of
+                    {ok, Vs} when is_list(Vs) ->
+                        lists:foldr(fun({D,V}, Acc1) ->
+                            {_,N} = lists:keyfind(D,1,DPs),
+                            [{N,V}|Acc1]
+                                    end, Acc, Vs);
+                    Other ->
+                        Val = case Other of
+                                  {ok, disabled} -> undefined;
+                                  _ -> 0
+                              end,
+                          lists:foldr(fun({_,N}, Acc1) ->
+                              [{N,Val}|Acc1]
+                                      end, Acc, DPs)
+                end
+            end, [], orddict:to_list(Group))).
 
 -spec(aliases(type(), list()) -> ok | acc() | error()).
 %% @doc
