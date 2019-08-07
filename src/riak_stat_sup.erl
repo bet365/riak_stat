@@ -50,7 +50,7 @@ init([]) ->
     MaxSecondsBetweenRestarts = 3600,
     SupFlags =
         {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
-   
+
     ProfileChild = ?CHILD(riak_stat_profiles),
 
     {ok, {SupFlags, [ProfileChild]}}.
