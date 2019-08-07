@@ -142,20 +142,31 @@ start_link() ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore).
 init([]) ->
-    Profiles = pull_profiles(), % Pull out already saved profiles in the metadata
+
+
+%%    Profiles = pull_profiles(), % Pull out already saved profiles in the metadata
     Tid =                       % create ets for profiles
       ets:new(profiles, [
         set,
         protected,
+        named_table,
         {keypos, 1},
         {write_concurrency, true},
         {read_concurrency, true}
       ]),
+
     Loaded = last_loaded_profile(),
-    ets:insert(Tid, Profiles),
+    case pull_profiles() of
+        false -> ok;
+        Profiles -> ets:insert(Tid, Profiles)
+    end,
+%%    io:format("Profiles : ~p~n", [Profiles]),
     case Loaded of %% load last profile that was loaded
         [<<"none">>] -> [];
-        _ -> gen_server:call(?SERVER, {load, Loaded})
+        false -> ok;
+        Other ->
+            io:format("Other: ~p~n", [Other]),
+            gen_server:call(?SERVER, {load, Other})
     end,
 
     {ok, #state{profilelist = Tid}}.
