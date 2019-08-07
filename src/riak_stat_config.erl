@@ -31,7 +31,8 @@ set_env(Env, Value) ->
 %% ---------------------------------------------------------------------
 
 ensure_all() ->
-    application:ensure_all_started(?APP).
+    application:ensure_all_started(?APP),
+    application:ensure_all_started(exometer).
 
 get_all_info() ->
     application:get_all_env(?APP).
