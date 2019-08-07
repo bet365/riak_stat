@@ -32,7 +32,7 @@ set_env(Env, Value) ->
 
 ensure_all() ->
     application:ensure_all_started(?APP),
-    {ok, Started} = application:ensure_all_started(exometer),
+    {ok, Started} = application:ensure_all_started(exometer_core),
     io:format("Started: ~p ~n", [Started]), ok.
 
 get_all_info() ->
