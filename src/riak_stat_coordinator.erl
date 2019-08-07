@@ -289,7 +289,7 @@ get_loaded_profile() ->
 %% and send that status to exometer
 %% @end
 register({Stat, Type, Opts, Aliases} = Arg) ->
-    Fun = fun register_in_both/1,
+    Fun = fun register_in_both/4,
     case maybe_meta(Fun, Arg) of
         false  ->
             register_in_exometer(Stat, Type, Opts, Aliases);
@@ -297,8 +297,8 @@ register({Stat, Type, Opts, Aliases} = Arg) ->
             Ans
     end.
 
-register_in_both({Stat, Type, _Opts, Aliases}=StatInfo) ->
-    case register_in_metadata(StatInfo) of
+register_in_both(Stat, Type, Opts, Aliases) ->
+    case register_in_metadata({Stat, Type, Opts, Aliases}) of
         [] -> ok;
         NewOpts -> register_in_exometer(Stat, Type, NewOpts, Aliases)
     end.
